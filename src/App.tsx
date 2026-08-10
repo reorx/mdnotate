@@ -72,7 +72,10 @@ function App() {
 
   return (
     <div className="flex h-screen flex-col bg-white text-neutral-900">
-      <header className="flex h-9 shrink-0 items-center gap-1.5 border-b border-neutral-200 px-2">
+      <header
+        data-tauri-drag-region
+        className={`flex h-9 shrink-0 items-center gap-1.5 border-b border-neutral-200 px-2 ${isTauri ? 'pl-[72px]' : ''}`}
+      >
         <button
           className="rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
           title="Toggle table of contents"
@@ -92,7 +95,7 @@ function App() {
             {fileName}
           </span>
         )}
-        <div className="flex-1" />
+        <div data-tauri-drag-region className="flex-1" />
         {filePath && view === 'reader' && (
           <button
             className="flex items-center gap-1.5 rounded bg-amber-500 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
