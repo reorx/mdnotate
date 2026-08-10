@@ -27,3 +27,7 @@ tauri-plugin-store = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-single-instance = "2"
 
+# LaunchServices FFI for the "default Markdown app" status
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+

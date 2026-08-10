@@ -6,7 +6,7 @@ Register it as the default opener for `.md` / `.markdown` files, read in a dense
 
 ## Features
 
-- **Default Markdown opener**: file associations for `md` / `markdown` (Finder double-click, `open -a mdnotate file.md`, drag-and-drop, CLI argument; single-instance)
+- **Default Markdown opener**: file associations for `md` / `markdown` (Finder double-click, `open -a mdnotate file.md`, drag-and-drop, CLI argument; single-instance). The start screen shows whether mdnotate currently holds the association and offers a one-click **Set as Default** (macOS asks you to confirm)
 - **Reading-first typography**: dense layout, high signal-to-noise, no editing
 - **TOC sidebar**: heading tree, click to jump, scroll-spy highlights the current heading
 - **Annotations**: select text → Highlight or Comment (powered by `@recogito/text-annotator`, in-memory per session)
@@ -38,5 +38,5 @@ Opening `pnpm dev` in a plain browser loads a built-in sample document (no Tauri
 
 - `src/lib/` — pure logic (annotation list ops + markdown serialization, export template, TOC slugs) and the `use-text-annotator` hook
 - `src/components/` — Reader (markdown + TOC + annotator), AnnotationPopup, ExportView, SettingsView
-- `src-tauri/` — file-open routing (macOS `RunEvent::Opened`, argv, single-instance, drag-drop → one pending-open queue), `read_markdown_file` command, `Info.plist` document types
+- `src-tauri/` — file-open routing (macOS `RunEvent::Opened`, argv, single-instance, drag-drop → one pending-open queue), `read_markdown_file` command, `default_app.rs` (LaunchServices FFI), `Info.plist` document types
 - `tests/` — vitest behavior tests for the pure logic

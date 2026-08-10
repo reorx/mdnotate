@@ -1,7 +1,11 @@
+mod default_app;
+
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use tauri::{AppHandle, Emitter, Manager};
+
+use default_app::DefaultAppStatus;
 
 /// File path waiting to be picked up by the frontend once it has mounted.
 /// Cold-start opens (Finder double-click before the webview exists) land here;
@@ -38,6 +42,16 @@ fn take_pending_file(state: tauri::State<'_, PendingOpen>) -> Option<String> {
     state.0.lock().unwrap().take()
 }
 
+#[tauri::command]
+fn markdown_default_app_status(app: AppHandle) -> DefaultAppStatus {
+    default_app::status(&app.config().identifier)
+}
+
+#[tauri::command]
+fn set_markdown_default_app(app: AppHandle) {
+    default_app::request_default(&app.config().identifier);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -61,7 +75,12 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(PendingOpen(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![read_markdown_file, take_pending_file])
+        .invoke_handler(tauri::generate_handler![
+            read_markdown_file,
+            take_pending_file,
+            markdown_default_app_status,
+            set_markdown_default_app
+        ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
                 for path in paths {

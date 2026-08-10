@@ -13,11 +13,13 @@ Tauri v2 + React 19 + Vite 7 + TypeScript + Tailwind v4 + zustand。pnpm 管理�
 ```
 src/lib/          纯逻辑 + hook：annotations（数据模型与导出序列化）、
                   template（导出模板渲染）、toc（heading slug）、
-                  use-text-annotator（recogito 封装）、settings、tauri-env、sample-doc
+                  use-text-annotator（recogito 封装）、settings、default-app、
+                  tauri-env、sample-doc
 src/components/   Reader（Markdown + 目录 + 标注容器）、Toc、AnnotationPopup、
-                  ExportView、SettingsView
+                  ExportView、SettingsView、DefaultAppCard
 src/store.ts      zustand 全局状态
-src-tauri/src/    lib.rs（文件打开路由 + commands）、main.rs
+src-tauri/src/    lib.rs（文件打开路由 + commands）、default_app.rs
+                  （LaunchServices FFI）、main.rs
 tests/            vitest 行为测试，只覆盖 src/lib 的纯逻辑
 kb/               知识库（sessions / plans / notes / docs …）
 ```
@@ -36,6 +38,8 @@ pnpm tauri build   # 产出 .app 与 .dmg
 - **开发方法论**：新功能走 BDD（先写 `tests/` 下的行为测试再实现），bug 修复走 TDD。纯逻辑必须放在 `src/lib/` 并有测试覆盖；组件层不写单测。
 - **文件打开路由**：macOS `RunEvent::Opened`、argv、single-instance 转发、窗口 DragDrop 四条路径全部收敛到 `lib.rs` 的 `open_path()`。Rust 侧存 `PendingOpen` 队列 + emit `open-file` 事件；前端必须**先注册 listener 再 drain pending**。single-instance 的 `argv[1]` 是相对路径，要用回调的 `cwd` 拼接。
 - **文件关联**：`tauri.conf.json` 的 `bundle.fileAssociations` 与手写的 `src-tauri/Info.plist`（`CFBundleDocumentTypes`）共同生效。
+- **默认 App 状态**：空状态界面的 `DefaultAppCard` 显示 mdnotate 是否为 `.md` 默认打开方式。Rust 侧 `default_app.rs` 直接 FFI 调 LaunchServices（`LSCopyDefaultRoleHandlerForContentType` / `LSSetDefaultRoleHandlerForContentType` / `LSCopyApplicationURLsForBundleIdentifier`），UTI 用 `net.daringfireball.markdown`（`.md` 与 `.markdown` 都归它）。**关键：设置是异步且需用户确认的**——macOS 自己弹「Use "mdnotate" / Keep "X"」对话框，LS 调用立刻返回 `noErr` 且此时读回来仍是旧 handler（对不存在的 bundle id 也返回 `noErr`）。所以前端点完按钮进入 `awaiting`，轮询 `markdown_default_app_status` 等结果，超时才提示走 Finder ⌘I。macOS 26 上验证：未确认前无论新旧 API（`NSWorkspace.setDefaultApplication` 也一样）都不会改动关联。
+- **默认 App 的 dev 限制**：`tauri dev` 跑的是未打包二进制，`app_registered` 取决于系统里是否已注册过某个 mdnotate.app；要完整验证需 `pnpm tauri build` 后运行 .app。浏览器模式下 `default-app.ts` 有 DEV-only stub 便于调 UI。
 - **recogito 约束**：必须 `renderer: 'SPANS'`；库在鼠标松开时立即创建 draft，未提交的 draft 要在选区移动/外部点击/dismiss 时删除；`popupRef` 与 `setPopup` 同步写入；弹窗需带 `not-annotatable` class。view 弹窗用 `[data-annotation]` overlay span 的 rect 定位。
 - **标注数据模型**：highlight 与 comment 是同一结构，`comment === null` 即纯高亮；UI 区分，数据层不区分。锚点是渲染文本的字符偏移（`start`/`end` + `quote`）。
 - **标注不持久化**：仅存在于内存，切换文件或关闭应用即清空。

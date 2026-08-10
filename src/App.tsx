@@ -7,6 +7,7 @@ import { SAMPLE_DOC, SAMPLE_DOC_PATH } from './lib/sample-doc';
 import { loadTemplate } from './lib/settings';
 import { isTauri } from './lib/tauri-env';
 import { useAppStore } from './store';
+import { DefaultAppCard } from './components/DefaultAppCard';
 import { ExportView } from './components/ExportView';
 import { Reader } from './components/Reader';
 import { SettingsView } from './components/SettingsView';
@@ -131,15 +132,14 @@ function App() {
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-neutral-400">
           <FileText className="h-10 w-10" />
-          <p className="text-sm">
-            Open a Markdown file to start reading — or set mdnotate as the default app for <code>.md</code> files.
-          </p>
+          <p className="text-sm">Open a Markdown file to start reading.</p>
           <button
             className="rounded bg-amber-500 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-amber-600"
             onClick={() => openFileDialog().catch((e) => setError(String(e)))}
           >
             Open File…
           </button>
+          <DefaultAppCard />
         </div>
       )}
     </div>
