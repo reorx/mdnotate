@@ -1,0 +1,148 @@
+@import 'tailwindcss';
+
+:root {
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/*
+ * Dense reading typography. Deliberately tighter than typical prose themes:
+ * the app is a reader, so information density beats airiness.
+ */
+.prose-dense {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #1a1a1a;
+  overflow-wrap: break-word;
+}
+
+.prose-dense h1,
+.prose-dense h2,
+.prose-dense h3,
+.prose-dense h4,
+.prose-dense h5,
+.prose-dense h6 {
+  font-weight: 650;
+  line-height: 1.25;
+  margin: 1.1em 0 0.35em;
+  scroll-margin-top: 0.75rem;
+}
+
+.prose-dense h1 {
+  font-size: 1.5em;
+  margin-top: 0.3em;
+}
+.prose-dense h2 {
+  font-size: 1.25em;
+  padding-bottom: 0.15em;
+  border-bottom: 1px solid #eee;
+}
+.prose-dense h3 {
+  font-size: 1.1em;
+}
+.prose-dense h4,
+.prose-dense h5,
+.prose-dense h6 {
+  font-size: 1em;
+}
+
+.prose-dense p,
+.prose-dense ul,
+.prose-dense ol,
+.prose-dense blockquote,
+.prose-dense pre,
+.prose-dense table {
+  margin: 0.55em 0;
+}
+
+.prose-dense ul,
+.prose-dense ol {
+  padding-left: 1.5em;
+}
+.prose-dense ul {
+  list-style: disc;
+}
+.prose-dense ol {
+  list-style: decimal;
+}
+.prose-dense li {
+  margin: 0.15em 0;
+}
+.prose-dense li > ul,
+.prose-dense li > ol {
+  margin: 0.1em 0;
+}
+
+.prose-dense code {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.87em;
+  background: #f3f3f2;
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+
+.prose-dense pre {
+  background: #f8f8f7;
+  border: 1px solid #ececea;
+  border-radius: 5px;
+  padding: 0.6em 0.8em;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+.prose-dense pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85em;
+}
+
+.prose-dense blockquote {
+  border-left: 3px solid #d9d9d6;
+  padding-left: 0.8em;
+  color: #555;
+}
+
+.prose-dense table {
+  border-collapse: collapse;
+  font-size: 0.93em;
+}
+.prose-dense th,
+.prose-dense td {
+  border: 1px solid #e2e2e0;
+  padding: 0.3em 0.6em;
+  text-align: left;
+}
+.prose-dense th {
+  background: #f7f7f6;
+  font-weight: 600;
+}
+
+.prose-dense a {
+  color: #b45309;
+  text-decoration: none;
+}
+.prose-dense a:hover {
+  text-decoration: underline;
+}
+
+.prose-dense img {
+  max-width: 100%;
+}
+
+.prose-dense hr {
+  border: none;
+  border-top: 1px solid #e5e5e3;
+  margin: 1.2em 0;
+}
+
+.prose-dense ::selection {
+  background: rgba(245, 158, 11, 0.25);
+}
