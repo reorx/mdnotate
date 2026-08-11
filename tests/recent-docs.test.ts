@@ -10,6 +10,7 @@ import {
   hashText,
   makeSnippet,
   MAX_CLIPBOARD_CHARS,
+  MIN_CLIPBOARD_CHARS,
   RECENTS_LIMIT,
   upsertRecent,
 } from '../src/lib/recent-docs';
@@ -170,17 +171,41 @@ describe('describeClipboard', () => {
   });
 
   it('reports the character count and a preview for readable content', () => {
-    const d = describeClipboard('# Notes\n\nSome copied prose.');
+    const text = `# Notes\n\n${'Some copied prose. '.repeat(20)}`;
+    const d = describeClipboard(text);
     expect(d.state).toBe('ready');
     expect(d.canOpen).toBe(true);
-    expect(d.charCount).toBe(27);
-    expect(d.snippet).toBe('# Notes Some copied prose.');
-    expect(d.label).toContain('27');
+    expect(d.charCount).toBe(countChars(text));
+    expect(d.snippet.startsWith('# Notes Some copied prose.')).toBe(true);
+    expect(d.label).toContain(String(d.charCount));
   });
 
   it('groups the character count for readability', () => {
     const d = describeClipboard('z'.repeat(3214));
     expect(d.label).toContain('3,214');
+  });
+
+  // A copied word, URL or line of code is not what this app is for; only a
+  // paste long enough to be worth reading gets offered.
+  it('refuses a paste at or below the minimum length', () => {
+    const d = describeClipboard('z'.repeat(MIN_CLIPBOARD_CHARS));
+    expect(d.state).toBe('too-short');
+    expect(d.canOpen).toBe(false);
+    expect(d.snippet).toBe('');
+    expect(d.label).toMatch(/too short/i);
+  });
+
+  it('offers a paste one character over the minimum', () => {
+    const d = describeClipboard('z'.repeat(MIN_CLIPBOARD_CHARS + 1));
+    expect(d.state).toBe('ready');
+    expect(d.canOpen).toBe(true);
+  });
+
+  it('measures the paste in characters, not code units', () => {
+    // 150 astral emoji are 300 code units but only 150 characters.
+    const d = describeClipboard('😀'.repeat(150));
+    expect(d.charCount).toBe(150);
+    expect(d.state).toBe('too-short');
   });
 
   it('refuses content beyond the size limit', () => {

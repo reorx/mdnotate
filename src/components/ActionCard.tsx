@@ -47,22 +47,26 @@ export function CardNote({
 /** An ActionCard's right-hand button. `primary` is the one that opens something. */
 export function CardButton({
   variant = 'primary',
+  type = 'button',
   disabled,
   onClick,
   children,
 }: {
   variant?: 'primary' | 'secondary';
+  /** `submit` for the button that ends a card's own form. */
+  type?: 'button' | 'submit';
   disabled?: boolean;
-  onClick: () => void;
+  onClick?: () => void;
   children: ReactNode;
 }) {
   const style =
     variant === 'primary'
-      ? 'bg-amber-500 text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40'
+      ? 'bg-amber-500 text-white hover:bg-amber-600'
       : 'border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100';
   return (
     <button
-      className={`shrink-0 rounded px-2.5 py-1 text-[12px] font-medium ${style}`}
+      className={`shrink-0 rounded px-2.5 py-1 text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-40 ${style}`}
+      type={type}
       disabled={disabled}
       onClick={onClick}
     >

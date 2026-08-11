@@ -34,6 +34,12 @@ export interface RecentDoc {
 /** Pastes beyond this are refused rather than stored — a paste that large is not something to read. */
 export const MAX_CLIPBOARD_CHARS = 2_000_000;
 
+/**
+ * A paste has to be longer than this to be offered. A copied word, URL or line
+ * of code is not a document, and lighting up the card for one is just noise.
+ */
+export const MIN_CLIPBOARD_CHARS = 200;
+
 /** How many entries the recents list keeps before the oldest fall off. */
 export const RECENTS_LIMIT = 50;
 
@@ -122,7 +128,7 @@ export function formatCharCount(n: number): string {
   return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
-export type ClipboardState = 'empty' | 'ready' | 'too-large';
+export type ClipboardState = 'empty' | 'too-short' | 'ready' | 'too-large';
 
 export interface ClipboardPreview {
   state: ClipboardState;
@@ -138,6 +144,15 @@ export function describeClipboard(text: string | null): ClipboardPreview {
     return { state: 'empty', charCount: 0, snippet: '', label: 'Clipboard is empty', canOpen: false };
   }
   const charCount = countChars(text);
+  if (charCount <= MIN_CLIPBOARD_CHARS) {
+    return {
+      state: 'too-short',
+      charCount,
+      snippet: '',
+      label: `Clipboard content is too short (${formatCharCount(charCount)} characters)`,
+      canOpen: false,
+    };
+  }
   if (charCount > MAX_CLIPBOARD_CHARS) {
     return {
       state: 'too-large',
