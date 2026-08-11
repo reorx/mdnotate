@@ -12,7 +12,7 @@ Tauri v2 + React 19 + Vite 7 + TypeScript + Tailwind v4 + zustand。pnpm 管理�
 
 ```
 src/lib/          纯逻辑 + hook：annotations（数据模型、失效判定与导出序列化）、
-                  template（导出模板渲染）、toc（heading slug）、
+                  template（导出模板渲染）、typography（阅读排版模型与校验）、toc（heading slug）、
                   recent-docs（文档模型 + 剪切板标题/预览等纯规则）、
                   db（共享 SQLite 连接）、recents-db、annotations-db（两张表的 IO）、
                   open-doc（打开文档的唯一入口）、annotate（改动标注的唯一入口）、
@@ -67,7 +67,8 @@ pnpm tauri build   # 产出 .app 与 .dmg
 - **标注持久化**：`annotations` 表，`doc_id` 外键指向 `recent_docs.id` 且 `ON DELETE CASCADE`（sqlx 默认开 `PRAGMA foreign_keys`，级联真的会触发）。**代价是 Recent 的 50 条裁剪会连带销毁标注**，这是明确选择的行为。改标注走 `src/lib/annotate.ts` 这一个漏斗：先写 store 后写库，写库失败只出 banner。写入用 `ON CONFLICT(id) DO UPDATE` 只更新 comment/updated_at —— quote 与偏移在提交那一刻就固定了。
 - **标注失效判定**：每条标注存一份创建时的 `doc_hash`（`hashText(content)`）。偏移是渲染文本的字符偏移，文件在外部被改过就会全部错位，而 recogito 的 `reviveTextSelector` 只按偏移数文本节点、**不校验 quote**，会静默高亮到错的句子。所以打开时 hash 不匹配的直接删除并提示丢弃条数（纯规则在 `annotations.ts` 的 `splitStaleAnnotations`，有测试）。剪切板文档的 id 本身就是内容 hash，天然永远匹配。
 - **标注必须与文档同时进 store**：`use-text-annotator` 只在 effect 创建时 `setAnnotations` 一次（deps 只有 `enabled`/`documentKey`），异步晚到的标注不会被渲染，所以 `openDoc(doc, annotations)` 是一次性写入的。
-- **排版**：`src/App.css` 的 `.prose-dense`，刻意紧凑（15px / 1.6 行高），追求信息密度而非留白。
+- **排版**：`src/App.css` 的 `.prose-dense`，默认刻意紧凑（15px / 1.6 行高），追求信息密度而非留白。字号 / 行高 / 栏宽三项可在设置页调，**Markdown 与纯文本各存一套**（key 就是 `DocFormat`，设置页两个 tab，打开设置时默认停在当前文档的那一套）。传导链路只有一条：`typography.ts` 的 `typographyVars()` → 三个 `--prose-*` 自定义属性 → Reader 的滚动容器 inline style（设置页的预览块用同一个函数，所见即所得）。**默认值只写在 `DEFAULT_TYPOGRAPHY` 一处，CSS 里不留第二份**，所以 `.prose-dense` / `.prose-plain` / `.prose-column` 用的是不带 fallback 的 `var()` —— 新增渲染 prose 的地方必须挂在一个提供了这三个变量的节点下。`.prose-dense` 内部全是 `em`，动根字号整套层级自动等比缩放；`pre` 的行高是 `calc(var(--prose-line-height) - 0.1)`，当初刻意的是那 0.1 的差，不是绝对值。栏宽单位是 rem（不随字号联动），滑块最右一格越界即 `'full'`（`widthFromSlider`），左右 `px-8` 内边距恒定不参与调节。
+- **设置的读写**：`settings.ts` 是通用 kv —— `loadSettings()` / `saveSettings(patch)`，底层一个 key 一个 entry（plugin-store，浏览器降级 localStorage 存 JSON），加新设置项不会重写旧的。读回来一律过 `mergeSettings` 逐字段校验（typography 走 `clampTypography`，越界值 clamp、坏类型退默认、按 step 精度取整）：**手改坏 settings.json 不该让阅读器打不开**。store 里对应的是整个 `settings` 对象 + `updateSettings(patch)`。排版滑块是即时生效 + 防抖 200ms 落盘，`SettingsView` 卸载时会 flush 未落盘的改动，否则「拖完立刻点 Back」会丢最后一次。
 - **浏览器降级**：`src/lib/tauri-env.ts` 的 `isTauri` 判断，让 UI 可以在纯浏览器里迭代（示例文档 / localStorage / navigator.clipboard）。
 
 ## 发布

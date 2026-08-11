@@ -9,7 +9,7 @@ import { useAppStore } from '../store';
 export function ExportView() {
   const source = useAppStore((s) => s.doc?.source ?? '');
   const annotations = useAppStore((s) => s.annotations);
-  const template = useAppStore((s) => s.template);
+  const template = useAppStore((s) => s.settings.template);
   const setView = useAppStore((s) => s.setView);
   const [copied, setCopied] = useState(false);
 

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAppStore } from '../store';
 import { createAnnotation, deleteAnnotation, updateComment } from '../lib/annotate';
 import { buildToc, type TocItem } from '../lib/toc';
+import { typographyVars } from '../lib/typography';
 import { useTextAnnotator } from '../lib/use-text-annotator';
 import { AnnotationList } from './AnnotationList';
 import { AnnotationPopup } from './AnnotationPopup';
@@ -16,6 +17,7 @@ export function Reader() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const annotationsOpen = useAppStore((s) => s.annotationsOpen);
   const annotations = useAppStore((s) => s.annotations);
+  const typography = useAppStore((s) => s.settings.typography[format]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [toc, setToc] = useState<TocItem[]>([]);
@@ -113,8 +115,12 @@ export function Reader() {
           <Toc items={toc} activeId={activeId} onJump={jumpTo} />
         </aside>
       )}
-      <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto">
-        <div ref={annotator.containerRef} className="relative mx-auto max-w-[46rem] px-8 py-6">
+      <div
+        ref={scrollRef}
+        className="min-w-0 flex-1 overflow-y-auto"
+        style={typographyVars(typography) as CSSProperties}
+      >
+        <div ref={annotator.containerRef} className="prose-column relative mx-auto px-8 py-6">
           {/* Plain text is shown as it was written — running it through the
               Markdown renderer would turn a leading # into a heading and
               collapse the line breaks a log or a config depends on. Either way

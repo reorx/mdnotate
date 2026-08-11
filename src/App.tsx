@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { House, LoaderCircle, PanelLeft, PanelRight, Settings, SquareArrowOutUpRight } from 'lucide-react';
 import { openSpec } from './lib/open-doc';
-import { loadTemplate } from './lib/settings';
+import { loadSettings } from './lib/settings';
 import { isTauri } from './lib/tauri-env';
 import { useAppStore, type View } from './store';
 import { ExportView } from './components/ExportView';
@@ -19,14 +19,14 @@ function App() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const toggleAnnotations = useAppStore((s) => s.toggleAnnotations);
   const annotationCount = useAppStore((s) => s.annotations.length);
-  const setTemplate = useAppStore((s) => s.setTemplate);
+  const updateSettings = useAppStore((s) => s.updateSettings);
   const error = useAppStore((s) => s.error);
   const setError = useAppStore((s) => s.setError);
   const opening = useAppStore((s) => s.opening);
 
   useEffect(() => {
-    loadTemplate()
-      .then(setTemplate)
+    loadSettings()
+      .then(updateSettings)
       .catch(() => {});
     if (!isTauri) return;
     let unlisten: (() => void) | undefined;
@@ -49,7 +49,7 @@ function App() {
       cancelled = true;
       unlisten?.();
     };
-  }, [setTemplate]);
+  }, [updateSettings]);
 
   // Everything other than the reader is laid over it instead of replacing it:
   // the reader keeps its scroll position, its annotator and its rendered

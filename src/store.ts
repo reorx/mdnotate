@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { removeAnnotation, setAnnotationComment, upsertAnnotation, type Annotation } from './lib/annotations';
 import type { OpenDoc } from './lib/recent-docs';
-import { DEFAULT_TEMPLATE } from './lib/template';
+import { DEFAULT_SETTINGS, type Settings } from './lib/settings';
 
 export type View = 'home' | 'reader' | 'export' | 'settings';
 
@@ -12,7 +12,8 @@ interface AppState {
   /** The annotation list on the right; hidden until there is something in it. */
   annotationsOpen: boolean;
   annotations: Annotation[];
-  template: string;
+  /** The persisted preferences, mirrored here so the UI reads them synchronously. */
+  settings: Settings;
   /** Message for the banner under the toolbar; null when there is nothing wrong. */
   error: string | null;
   /** What is being fetched right now, shown in the toolbar; null when nothing is. */
@@ -26,7 +27,7 @@ interface AppState {
   addAnnotation: (annotation: Annotation) => void;
   removeAnnotationById: (id: string) => void;
   setComment: (id: string, comment: string | null) => void;
-  setTemplate: (template: string) => void;
+  updateSettings: (patch: Partial<Settings>) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -35,7 +36,7 @@ export const useAppStore = create<AppState>((set) => ({
   sidebarOpen: true,
   annotationsOpen: false,
   annotations: [],
-  template: DEFAULT_TEMPLATE,
+  settings: DEFAULT_SETTINGS,
   error: null,
   opening: null,
   // A successful open clears whatever went wrong last time. Annotations arrive
@@ -54,5 +55,5 @@ export const useAppStore = create<AppState>((set) => ({
   removeAnnotationById: (id) => set((s) => ({ annotations: removeAnnotation(s.annotations, id) })),
   setComment: (id, comment) =>
     set((s) => ({ annotations: setAnnotationComment(s.annotations, id, comment, Date.now()) })),
-  setTemplate: (template) => set({ template }),
+  updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
 }));

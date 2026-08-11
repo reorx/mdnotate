@@ -17,10 +17,18 @@
 /*
  * Dense reading typography. Deliberately tighter than typical prose themes:
  * the app is a reader, so information density beats airiness.
+ *
+ * The three --prose-* properties below are injected by `typographyVars()` from
+ * `lib/typography.ts`, which also holds the defaults these used to hardcode.
+ * Every element that renders prose sits under a node that provides them.
  */
+.prose-column {
+  max-width: var(--prose-width);
+}
+
 .prose-dense {
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: var(--prose-font-size);
+  line-height: var(--prose-line-height);
   color: #1a1a1a;
   overflow-wrap: break-word;
 }
@@ -96,7 +104,9 @@
   border-radius: 5px;
   padding: 0.6em 0.8em;
   overflow-x: auto;
-  line-height: 1.5;
+  /* Code reads better a touch tighter than prose. What was deliberate is the
+     gap, not the 1.5 — so it tracks the setting instead of ignoring it. */
+  line-height: calc(var(--prose-line-height) - 0.1);
 }
 .prose-dense pre code {
   background: none;
@@ -153,8 +163,8 @@
 .prose-plain {
   display: block;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.65;
+  font-size: var(--prose-font-size);
+  line-height: var(--prose-line-height);
   color: #1a1a1a;
   white-space: pre-wrap;
   overflow-wrap: break-word;
