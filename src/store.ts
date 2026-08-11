@@ -9,6 +9,8 @@ interface AppState {
   doc: OpenDoc | null;
   view: View;
   sidebarOpen: boolean;
+  /** The annotation list on the right; hidden until there is something in it. */
+  annotationsOpen: boolean;
   annotations: Annotation[];
   template: string;
   /** Message for the banner under the toolbar; null when there is nothing wrong. */
@@ -20,6 +22,7 @@ interface AppState {
   setOpening: (opening: string | null) => void;
   setView: (view: View) => void;
   toggleSidebar: () => void;
+  toggleAnnotations: () => void;
   addAnnotation: (annotation: Annotation) => void;
   removeAnnotationById: (id: string) => void;
   setComment: (id: string, comment: string | null) => void;
@@ -30,6 +33,7 @@ export const useAppStore = create<AppState>((set) => ({
   doc: null,
   view: 'home',
   sidebarOpen: true,
+  annotationsOpen: false,
   annotations: [],
   template: DEFAULT_TEMPLATE,
   error: null,
@@ -42,7 +46,11 @@ export const useAppStore = create<AppState>((set) => ({
   setOpening: (opening) => set({ opening }),
   setView: (view) => set({ view }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
-  addAnnotation: (annotation) => set((s) => ({ annotations: upsertAnnotation(s.annotations, annotation) })),
+  toggleAnnotations: () => set((s) => ({ annotationsOpen: !s.annotationsOpen })),
+  // Making an annotation is what reveals the list: an empty panel is worth no
+  // screen width, and the first highlight is the moment it becomes worth some.
+  addAnnotation: (annotation) =>
+    set((s) => ({ annotations: upsertAnnotation(s.annotations, annotation), annotationsOpen: true })),
   removeAnnotationById: (id) => set((s) => ({ annotations: removeAnnotation(s.annotations, id) })),
   setComment: (id, comment) =>
     set((s) => ({ annotations: setAnnotationComment(s.annotations, id, comment, Date.now()) })),

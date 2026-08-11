@@ -22,7 +22,7 @@ src/lib/          纯逻辑 + hook：annotations（数据模型、失效判定�
                   default-app、tauri-env、sample-doc
 src/components/   Home（首页）、OpenFileCard、ClipboardCard、RecentList、DefaultAppCard、
                   ActionCard（首页三张卡片共用的壳 + CardNote/CardButton）、
-                  Reader（Markdown + 目录 + 标注容器）、Toc、AnnotationPopup、
+                  Reader（Markdown + 目录 + 标注容器）、Toc、AnnotationList、AnnotationPopup、
                   ExportView、SettingsView
 src/store.ts      zustand 全局状态
 src-tauri/src/    lib.rs（文件打开路由 + commands + SQLite migration）、
@@ -52,6 +52,8 @@ pnpm tauri build   # 产出 .app 与 .dmg
 - **可打开的格式**：`.md/.markdown/.mdown/.mkd` 按 Markdown 渲染；`.txt/.text/.log/.json/.yaml/.yml/.toml/.ini/.conf/.csv/.tsv` 以纯文本原样显示（`Reader` 的 `.prose-plain`，等宽 + `pre-wrap`，标注照常可用，目录显示「No headings」）；其余一律在联网之前就拒绝。扩展名列表在 `doc-locator.ts`（有测试）和 `lib.rs` 各一份——后者是 DragDrop 在前端看到文件之前就要筛选，属于无法避免的重复，改动要同步。文件关联仍然只注册 `.md/.markdown`，不去抢 `.txt`。
 - **默认 App 状态**：空状态界面的 `DefaultAppCard` 显示 mdnotate 是否为 `.md` 默认打开方式。Rust 侧 `default_app.rs` 直接 FFI 调 LaunchServices（`LSCopyDefaultRoleHandlerForContentType` / `LSSetDefaultRoleHandlerForContentType` / `LSCopyApplicationURLsForBundleIdentifier`），UTI 用 `net.daringfireball.markdown`（`.md` 与 `.markdown` 都归它）。**关键：设置是异步且需用户确认的**——macOS 自己弹「Use "mdnotate" / Keep "X"」对话框，LS 调用立刻返回 `noErr` 且此时读回来仍是旧 handler（对不存在的 bundle id 也返回 `noErr`）。所以前端点完按钮进入 `awaiting`，轮询 `markdown_default_app_status` 等结果，超时才提示走 Finder ⌘I。macOS 26 上验证：未确认前无论新旧 API（`NSWorkspace.setDefaultApplication` 也一样）都不会改动关联。
 - **默认 App 的 dev 限制**：`tauri dev` 跑的是未打包二进制，`app_registered` 取决于系统里是否已注册过某个 mdnotate.app；要完整验证需 `pnpm tauri build` 后运行 .app。浏览器模式下 `default-app.ts` 有 DEV-only stub 便于调 UI。
+- **视图切换是覆盖而不是替换**：export / settings / home 以 `absolute inset-0` 的不透明层盖在 Reader 之上（`App.tsx` 的 `overlay`），**Reader 从不卸载** —— 否则回到文档时 scroll position、annotator 实例、渲染好的 markdown 全部从头再来（原来的三元切换正是这个 bug）。两个配套细节缺一不可：Reader 根节点的 `relative z-0` 建一个层叠上下文，不然 z-20 的标注弹窗会浮在覆盖层之上；被盖住时挂 `inert`（React 19 支持布尔属性），把整棵子树移出 tab 顺序和读屏。
+- **标注侧栏**：右侧的 `AnnotationList`，默认隐藏，`addAnnotation` 时自动打开（store 的 `annotationsOpen`），toolbar 最右的 `PanelRight` 是开关。条目按文档顺序 —— store 里的 annotations 本来就是排好序的，不要在组件里再排一次。点击用 recogito 的 `scrollIntoView(id, 滚动容器)` 跳转，**滚动容器要显式传**，库自己是从 annotator 容器往上找第一个真的在滚动的祖先。哪一条算 active 由两个来源合成：面板里点了谁、文本里打开了哪个 view 弹窗，后者优先（点高亮时 marker 要跟着走）。
 - **recogito 约束**：必须 `renderer: 'SPANS'`；库在鼠标松开时立即创建 draft，未提交的 draft 要在选区移动/外部点击/dismiss 时删除；`popupRef` 与 `setPopup` 同步写入；弹窗需带 `not-annotatable` class。view 弹窗用 `[data-annotation]` overlay span 的 rect 定位。
 - **标注数据模型**：highlight 与 comment 是同一结构，`comment === null` 即纯高亮；UI 区分，数据层不区分。锚点是渲染文本的字符偏移（`start`/`end` + `quote`）。
 - **打开文档的唯一入口**：`src/lib/open-doc.ts`。文件关联 / 链接 / 对话框 / 拖拽 / 剪切板 / Recent / DEV sample 全部走它，保证「打开」与「记入 Recent」不会脱节。它写 store 在前、写库在后 —— 数据库出问题不该拦住阅读。**唯一的例外是读标注**：标注必须随文档一起进 store（见下），所以 `open()` 会先 await 它，但读失败只是裸开文档 + banner，绝不把文档挡在门外。从字符串进来的一律走 `openSpec()`（unwrap 链接 → 按需 `homeDir()` → `parseLocator` → `openLocator`）。

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  annotationPreview,
   annotationsToMarkdown,
   removeAnnotation,
   setAnnotationComment,
@@ -130,5 +131,27 @@ describe('annotationsToMarkdown', () => {
 
   it('returns an empty string for no annotations', () => {
     expect(annotationsToMarkdown([])).toBe('');
+  });
+});
+
+describe('annotationPreview', () => {
+  it('leaves a plain one-line quote as it is', () => {
+    expect(annotationPreview('some quoted text')).toBe('some quoted text');
+  });
+
+  it('folds line breaks into single spaces so the entry stays on its lines', () => {
+    expect(annotationPreview('line one\nline two')).toBe('line one line two');
+  });
+
+  it('collapses runs of whitespace left by the rendered markup', () => {
+    expect(annotationPreview('a  \n\n  b\tc')).toBe('a b c');
+  });
+
+  it('trims the edges', () => {
+    expect(annotationPreview('\n  padded  \n')).toBe('padded');
+  });
+
+  it('returns an empty string for whitespace only', () => {
+    expect(annotationPreview('   \n\t ')).toBe('');
   });
 });

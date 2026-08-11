@@ -209,8 +209,11 @@ export function useTextAnnotator({
     onSetComment(id, comment);
   };
 
-  const scrollToAnnotation = (id: string) => {
-    annoRef.current?.scrollIntoView(id);
+  // The library walks up from the container to guess the scroller; pass the
+  // reader's own so a document that happens not to overflow cannot send it to
+  // the page root instead.
+  const scrollToAnnotation = (id: string, scrollParent?: Element | null) => {
+    annoRef.current?.scrollIntoView(id, scrollParent ?? undefined);
   };
 
   return {

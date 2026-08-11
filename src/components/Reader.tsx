@@ -5,6 +5,7 @@ import { useAppStore } from '../store';
 import { createAnnotation, deleteAnnotation, updateComment } from '../lib/annotate';
 import { buildToc, type TocItem } from '../lib/toc';
 import { useTextAnnotator } from '../lib/use-text-annotator';
+import { AnnotationList } from './AnnotationList';
 import { AnnotationPopup } from './AnnotationPopup';
 import { Toc } from './Toc';
 
@@ -13,11 +14,13 @@ export function Reader() {
   const docId = useAppStore((s) => s.doc?.id ?? null);
   const format = useAppStore((s) => s.doc?.format ?? 'markdown');
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
+  const annotationsOpen = useAppStore((s) => s.annotationsOpen);
   const annotations = useAppStore((s) => s.annotations);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [toc, setToc] = useState<TocItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [pickedAnnotationId, setPickedAnnotationId] = useState<string | null>(null);
 
   const annotator = useTextAnnotator({
     enabled: !!content,
@@ -90,11 +93,21 @@ export function Reader() {
     setActiveId(id);
   };
 
+  const jumpToAnnotation = (id: string) => {
+    annotator.scrollToAnnotation(id, scrollRef.current);
+    setPickedAnnotationId(id);
+  };
+
   const popup = annotator.popup;
   const popupAnnotation = popup?.kind === 'view' ? annotations.find((a) => a.id === popup.annotationId) : undefined;
+  // An open popup wins: clicking a highlight in the text should move the
+  // marker in the list, not leave it on whatever was picked there before.
+  const activeAnnotationId = popup?.kind === 'view' ? popup.annotationId : pickedAnnotationId;
 
   return (
-    <div className="flex min-h-0 flex-1">
+    // A stacking context of its own, so the annotation popup (z-20) stays
+    // under the views that cover the reader rather than floating over them.
+    <div className="relative z-0 flex min-h-0 flex-1">
       {sidebarOpen && (
         <aside className="w-60 shrink-0 overflow-y-auto border-r border-neutral-200 bg-neutral-50">
           <Toc items={toc} activeId={activeId} onJump={jumpTo} />
@@ -128,6 +141,11 @@ export function Reader() {
           )}
         </div>
       </div>
+      {annotationsOpen && (
+        <aside className="w-72 shrink-0 overflow-y-auto border-l border-neutral-200 bg-neutral-50">
+          <AnnotationList annotations={annotations} activeId={activeAnnotationId} onJump={jumpToAnnotation} />
+        </aside>
+      )}
     </div>
   );
 }

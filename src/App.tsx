@@ -1,11 +1,11 @@
 import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { House, LoaderCircle, PanelLeft, Settings, SquareArrowOutUpRight } from 'lucide-react';
+import { House, LoaderCircle, PanelLeft, PanelRight, Settings, SquareArrowOutUpRight } from 'lucide-react';
 import { openSpec } from './lib/open-doc';
 import { loadTemplate } from './lib/settings';
 import { isTauri } from './lib/tauri-env';
-import { useAppStore } from './store';
+import { useAppStore, type View } from './store';
 import { ExportView } from './components/ExportView';
 import { Home } from './components/Home';
 import { Reader } from './components/Reader';
@@ -17,6 +17,7 @@ function App() {
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
+  const toggleAnnotations = useAppStore((s) => s.toggleAnnotations);
   const annotationCount = useAppStore((s) => s.annotations.length);
   const setTemplate = useAppStore((s) => s.setTemplate);
   const error = useAppStore((s) => s.error);
@@ -49,6 +50,11 @@ function App() {
       unlisten?.();
     };
   }, [setTemplate]);
+
+  // Everything other than the reader is laid over it instead of replacing it:
+  // the reader keeps its scroll position, its annotator and its rendered
+  // markdown, so a trip to export or settings comes back to the same page.
+  const overlay: Exclude<View, 'reader'> | null = view === 'reader' ? (doc ? null : 'home') : view;
 
   return (
     <div className="flex h-screen flex-col bg-white text-neutral-900">
@@ -103,6 +109,13 @@ function App() {
         >
           <Settings className="h-4 w-4" />
         </button>
+        <button
+          className="rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+          title="Toggle annotations"
+          onClick={toggleAnnotations}
+        >
+          <PanelRight className="h-4 w-4" />
+        </button>
       </header>
 
       {error && (
@@ -114,15 +127,20 @@ function App() {
         </div>
       )}
 
-      {view === 'settings' ? (
-        <SettingsView />
-      ) : view === 'export' ? (
-        <ExportView />
-      ) : view === 'home' || !doc ? (
-        <Home />
-      ) : (
-        <Reader />
-      )}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {doc && (
+          // Still rendered while covered, so `inert` keeps it out of the tab
+          // order and away from screen readers until it is on top again.
+          <div className="flex min-h-0 flex-1" inert={!!overlay}>
+            <Reader />
+          </div>
+        )}
+        {overlay && (
+          <div className="absolute inset-0 z-10 flex flex-col bg-white">
+            {overlay === 'settings' ? <SettingsView /> : overlay === 'export' ? <ExportView /> : <Home />}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

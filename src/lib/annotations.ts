@@ -113,6 +113,15 @@ export function setAnnotationComment(
 }
 
 /**
+ * One-line form of a quote or a comment, for the annotation sidebar: the line
+ * breaks and indentation carried over from the rendered document would
+ * otherwise blow a short quote up to the height of the panel.
+ */
+export function annotationPreview(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Serialize annotations to markdown: each highlight as a blockquote, followed
  * by its comment (if any), joined with blank lines, in document order.
  */
