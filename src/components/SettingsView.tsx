@@ -34,8 +34,9 @@ export function SettingsView() {
         <label className="mb-1 block text-[13px] font-medium text-neutral-800">Export template</label>
         <p className="mb-2 text-[12px] leading-snug text-neutral-500">
           Placeholders: <code className="rounded bg-neutral-100 px-1">{'{{filePath}}'}</code> — the path of the opened
-          file; <code className="rounded bg-neutral-100 px-1">{'{{annotations}}'}</code> — the highlights as
-          blockquotes, each followed by its comment.
+          file, or the title of a clipboard entry;{' '}
+          <code className="rounded bg-neutral-100 px-1">{'{{annotations}}'}</code> — the highlights as blockquotes, each
+          followed by its comment.
         </p>
         <textarea
           value={draft}

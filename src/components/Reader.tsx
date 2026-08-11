@@ -8,8 +8,8 @@ import { AnnotationPopup } from './AnnotationPopup';
 import { Toc } from './Toc';
 
 export function Reader() {
-  const content = useAppStore((s) => s.content);
-  const filePath = useAppStore((s) => s.filePath);
+  const content = useAppStore((s) => s.doc?.content ?? null);
+  const docId = useAppStore((s) => s.doc?.id ?? null);
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const annotations = useAppStore((s) => s.annotations);
   const addAnnotation = useAppStore((s) => s.addAnnotation);
@@ -22,7 +22,7 @@ export function Reader() {
 
   const annotator = useTextAnnotator({
     enabled: !!content,
-    documentKey: filePath,
+    documentKey: docId,
     annotations,
     onCreate: addAnnotation,
     onRemove: removeAnnotationById,

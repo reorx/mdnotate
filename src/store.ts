@@ -1,17 +1,20 @@
 import { create } from 'zustand';
 import { removeAnnotation, setAnnotationComment, upsertAnnotation, type Annotation } from './lib/annotations';
+import type { OpenDoc } from './lib/recent-docs';
 import { DEFAULT_TEMPLATE } from './lib/template';
 
-export type View = 'reader' | 'export' | 'settings';
+export type View = 'home' | 'reader' | 'export' | 'settings';
 
 interface AppState {
-  filePath: string | null;
-  content: string | null;
+  doc: OpenDoc | null;
   view: View;
   sidebarOpen: boolean;
   annotations: Annotation[];
   template: string;
-  openFile: (filePath: string, content: string) => void;
+  /** Message for the banner under the toolbar; null when there is nothing wrong. */
+  error: string | null;
+  openDoc: (doc: OpenDoc) => void;
+  setError: (error: string | null) => void;
   setView: (view: View) => void;
   toggleSidebar: () => void;
   addAnnotation: (annotation: Annotation) => void;
@@ -21,13 +24,15 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set) => ({
-  filePath: null,
-  content: null,
-  view: 'reader',
+  doc: null,
+  view: 'home',
   sidebarOpen: true,
   annotations: [],
   template: DEFAULT_TEMPLATE,
-  openFile: (filePath, content) => set({ filePath, content, annotations: [], view: 'reader' }),
+  error: null,
+  // A successful open clears whatever went wrong last time.
+  openDoc: (doc) => set({ doc, annotations: [], view: 'reader', error: null }),
+  setError: (error) => set({ error }),
   setView: (view) => set({ view }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   addAnnotation: (annotation) => set((s) => ({ annotations: upsertAnnotation(s.annotations, annotation) })),

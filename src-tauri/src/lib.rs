@@ -4,8 +4,33 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_sql::{Migration, MigrationKind};
 
 use default_app::DefaultAppStatus;
+
+/// Recently opened documents. Files are remembered by path; clipboard entries
+/// keep their full text in `body`, since there is nothing to re-read them from.
+/// Must match the URL the frontend passes to `Database.load`.
+const DB_URL: &str = "sqlite:mdnotate.db";
+
+fn migrations() -> Vec<Migration> {
+    vec![Migration {
+        version: 1,
+        description: "create_recent_docs",
+        sql: "CREATE TABLE recent_docs (
+                  id         TEXT PRIMARY KEY,
+                  kind       TEXT NOT NULL,
+                  title      TEXT NOT NULL,
+                  source     TEXT NOT NULL,
+                  body       TEXT,
+                  snippet    TEXT NOT NULL,
+                  char_count INTEGER NOT NULL,
+                  opened_at  INTEGER NOT NULL
+              );
+              CREATE INDEX idx_recent_docs_opened_at ON recent_docs (opened_at DESC);",
+        kind: MigrationKind::Up,
+    }]
+}
 
 /// File path waiting to be picked up by the frontend once it has mounted.
 /// Cold-start opens (Finder double-click before the webview exists) land here;
@@ -74,6 +99,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(
+            tauri_plugin_sql::Builder::default()
+                .add_migrations(DB_URL, migrations())
+                .build(),
+        )
         .manage(PendingOpen(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             read_markdown_file,

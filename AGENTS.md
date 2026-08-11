@@ -13,13 +13,17 @@ Tauri v2 + React 19 + Vite 7 + TypeScript + Tailwind v4 + zustand。pnpm 管理�
 ```
 src/lib/          纯逻辑 + hook：annotations（数据模型与导出序列化）、
                   template（导出模板渲染）、toc（heading slug）、
-                  use-text-annotator（recogito 封装）、settings、default-app、
-                  tauri-env、sample-doc
-src/components/   Reader（Markdown + 目录 + 标注容器）、Toc、AnnotationPopup、
-                  ExportView、SettingsView、DefaultAppCard
+                  recent-docs（文档模型 + 剪切板标题/预览等纯规则）、
+                  recents-db（SQLite IO）、open-doc（打开文档的唯一入口）、
+                  clipboard、use-text-annotator（recogito 封装）、settings、
+                  default-app、tauri-env、sample-doc
+src/components/   Home（首页）、ClipboardCard、RecentList、DefaultAppCard、
+                  ActionCard（首页三张卡片共用的壳 + CardNote/CardButton）、
+                  Reader（Markdown + 目录 + 标注容器）、Toc、AnnotationPopup、
+                  ExportView、SettingsView
 src/store.ts      zustand 全局状态
-src-tauri/src/    lib.rs（文件打开路由 + commands）、default_app.rs
-                  （LaunchServices FFI）、main.rs
+src-tauri/src/    lib.rs（文件打开路由 + commands + SQLite migration）、
+                  default_app.rs（LaunchServices FFI）、main.rs
 tests/            vitest 行为测试，只覆盖 src/lib 的纯逻辑
 kb/               知识库（sessions / plans / notes / docs …）
 ```
@@ -28,7 +32,8 @@ kb/               知识库（sessions / plans / notes / docs …）
 
 ```bash
 pnpm tauri dev     # 运行应用
-pnpm dev           # 只跑前端；浏览器里会加载内置示例文档（无 Tauri 后端时的降级）
+pnpm dev           # 只跑前端；无 Tauri 后端时的降级（Recent 走 localStorage，
+                   #   首页有 DEV-only 的「Open the sample document」入口）
 pnpm test          # vitest
 pnpm tauri build   # 产出 .app 与 .dmg
 ```
@@ -42,7 +47,12 @@ pnpm tauri build   # 产出 .app 与 .dmg
 - **默认 App 的 dev 限制**：`tauri dev` 跑的是未打包二进制，`app_registered` 取决于系统里是否已注册过某个 mdnotate.app；要完整验证需 `pnpm tauri build` 后运行 .app。浏览器模式下 `default-app.ts` 有 DEV-only stub 便于调 UI。
 - **recogito 约束**：必须 `renderer: 'SPANS'`；库在鼠标松开时立即创建 draft，未提交的 draft 要在选区移动/外部点击/dismiss 时删除；`popupRef` 与 `setPopup` 同步写入；弹窗需带 `not-annotatable` class。view 弹窗用 `[data-annotation]` overlay span 的 rect 定位。
 - **标注数据模型**：highlight 与 comment 是同一结构，`comment === null` 即纯高亮；UI 区分，数据层不区分。锚点是渲染文本的字符偏移（`start`/`end` + `quote`）。
-- **标注不持久化**：仅存在于内存，切换文件或关闭应用即清空。
+- **打开文档的唯一入口**：`src/lib/open-doc.ts`。文件关联 / 对话框 / 拖拽 / 剪切板 / Recent 五条路径全部走它，保证「打开」与「记入 Recent」不会脱节。它写 store 在前、写库在后 —— 数据库出问题不该拦住阅读。
+- **文档模型 `OpenDoc`**：`id`（同时是 recogito 的 documentKey 和 Recent 主键）/ `kind` / `title`（标题栏）/ `source`（导出模板 `{{filePath}}` 的值：文件是全路径，剪切板是派生标题）/ `content`。取代了原来一人分饰三角的 `filePath`。
+- **Recent 与 SQLite**：`tauri-plugin-sql`，库文件 `sqlite:mdnotate.db`（`~/Library/Application Support/<identifier>/`），schema 由 `lib.rs` 的 `migrations()` 声明，前端 `Database.load` 时执行。**去重规则编码在 `id` 里** —— 文件是 `file:<绝对路径>`，剪切板是 `clip:<内容 hash>` —— 所以两种类型共用一条 `ON CONFLICT(id) DO UPDATE` upsert。上限 50 条，插入后按 `opened_at` 裁剪。剪切板正文存在 `body` 列（文件不存，重开时从磁盘重读）；列表查询不 select `body`。
+- **`sql:allow-execute` 不在 `sql:default` 里**，capabilities 必须单独加，漏了要到第一次写入才报错。
+- **剪切板探测**：没有剪切板变化事件，`ClipboardCard` 在挂载时和 window focus 时各读一次（focus 正是用户从别处复制完回来的时刻）。读不到与空剪切板等同处理。
+- **标注不持久化**：仅存在于内存，切换文件或关闭应用即清空。库已经有了，要做持久化成本不高，但目前刻意没做。
 - **排版**：`src/App.css` 的 `.prose-dense`，刻意紧凑（15px / 1.6 行高），追求信息密度而非留白。
 - **浏览器降级**：`src/lib/tauri-env.ts` 的 `isTauri` 判断，让 UI 可以在纯浏览器里迭代（示例文档 / localStorage / navigator.clipboard）。
 
@@ -53,6 +63,10 @@ push `v*` tag 触发 `.github/workflows/release.yml`：macOS runner 构建 unive
 ## 测试提示
 
 agent-browser 用合成 PointerEvent 无法触发 recogito 选区；必须用真实 CDP 鼠标序列：`mouse move` → `mouse down` → 中间点 `mouse move` → 终点 `mouse move` → `mouse up`。
+
+浏览器模式下 `navigator.clipboard.readText()` 会被权限拒绝，剪切板 UI 恒显示 empty；调 UI 时用 `eval` 覆盖 `navigator.clipboard` 再 `dispatchEvent(new FocusEvent('focus'))` 触发重读。
+
+Tauri 窗口没法用 agent-browser 驱动（不开 CDP）；`screencapture` 与 System Events 还可能被 TCC 挡住（截图全黑 / AX 报 0 窗口）。验证 Rust + SQLite 侧改用：`pnpm tauri dev` 起实例 → 用 `target/debug/mdnotate <file.md>` 触发 single-instance 转发 → `sqlite3` 直接查库断言。
 
 ## 文档
 

@@ -7,7 +7,7 @@ import { renderTemplate } from '../lib/template';
 import { useAppStore } from '../store';
 
 export function ExportView() {
-  const filePath = useAppStore((s) => s.filePath);
+  const source = useAppStore((s) => s.doc?.source ?? '');
   const annotations = useAppStore((s) => s.annotations);
   const template = useAppStore((s) => s.template);
   const setView = useAppStore((s) => s.setView);
@@ -16,10 +16,10 @@ export function ExportView() {
   const output = useMemo(
     () =>
       renderTemplate(template, {
-        filePath: filePath ?? '',
+        filePath: source,
         annotations: annotationsToMarkdown(annotations),
       }),
-    [template, filePath, annotations],
+    [template, source, annotations],
   );
 
   const copy = async () => {

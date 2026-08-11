@@ -7,6 +7,7 @@ import {
   type DefaultAppPhase,
   type DefaultAppStatus,
 } from '../lib/default-app';
+import { ActionCard, CardButton, CardNote } from './ActionCard';
 
 const ICONS = {
   loading: { Icon: LoaderCircle, className: 'text-neutral-400 animate-spin' },
@@ -79,21 +80,19 @@ export function DefaultAppCard() {
   const { Icon, className } = ICONS[display.state];
 
   return (
-    <div className="w-[28rem] max-w-full rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-left">
-      <div className="flex items-center gap-2">
-        <Icon className={`h-4 w-4 shrink-0 ${className}`} />
-        <p className="min-w-0 flex-1 text-[13px] leading-snug text-neutral-700">{display.label}</p>
-        {display.canSet && (
-          <button
-            className="shrink-0 rounded border border-neutral-300 bg-white px-2.5 py-1 text-[12px] font-medium text-neutral-700 hover:bg-neutral-100"
-            onClick={() => void request()}
-          >
+    <ActionCard
+      icon={<Icon className={`h-4 w-4 shrink-0 ${className}`} />}
+      label={display.label}
+      action={
+        display.canSet && (
+          <CardButton variant="secondary" onClick={() => void request()}>
             Set as Default
-          </button>
-        )}
-      </div>
-      {display.hint && <p className="mt-1.5 pl-6 text-[12px] leading-snug text-neutral-500">{display.hint}</p>}
-      {error && <p className="mt-1.5 pl-6 text-[12px] leading-snug text-red-600">{error}</p>}
-    </div>
+          </CardButton>
+        )
+      }
+    >
+      {display.hint && <CardNote>{display.hint}</CardNote>}
+      {error && <CardNote tone="error">{error}</CardNote>}
+    </ActionCard>
   );
 }

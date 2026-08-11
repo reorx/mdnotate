@@ -1,58 +1,39 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { open } from '@tauri-apps/plugin-dialog';
-import { FileText, FolderOpen, PanelLeft, Settings, SquareArrowOutUpRight } from 'lucide-react';
-import { SAMPLE_DOC, SAMPLE_DOC_PATH } from './lib/sample-doc';
+import { House, PanelLeft, Settings, SquareArrowOutUpRight } from 'lucide-react';
+import { openFilePath } from './lib/open-doc';
 import { loadTemplate } from './lib/settings';
 import { isTauri } from './lib/tauri-env';
 import { useAppStore } from './store';
-import { DefaultAppCard } from './components/DefaultAppCard';
 import { ExportView } from './components/ExportView';
+import { Home } from './components/Home';
 import { Reader } from './components/Reader';
 import { SettingsView } from './components/SettingsView';
 import './App.css';
 
-async function openPath(path: string) {
-  const content = await invoke<string>('read_markdown_file', { path });
-  useAppStore.getState().openFile(path, content);
-}
-
-async function openFileDialog() {
-  const path = await open({
-    multiple: false,
-    filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
-  });
-  if (typeof path === 'string') await openPath(path);
-}
-
 function App() {
-  const filePath = useAppStore((s) => s.filePath);
+  const doc = useAppStore((s) => s.doc);
   const view = useAppStore((s) => s.view);
   const setView = useAppStore((s) => s.setView);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const annotationCount = useAppStore((s) => s.annotations.length);
   const setTemplate = useAppStore((s) => s.setTemplate);
-  const [error, setError] = useState<string | null>(null);
+  const error = useAppStore((s) => s.error);
+  const setError = useAppStore((s) => s.setError);
 
   useEffect(() => {
     loadTemplate()
       .then(setTemplate)
       .catch(() => {});
-    if (!isTauri) {
-      // Plain-browser dev mode: no backend, load a sample document.
-      if (import.meta.env.DEV) {
-        useAppStore.getState().openFile(SAMPLE_DOC_PATH, SAMPLE_DOC);
-      }
-      return;
-    }
+    if (!isTauri) return;
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     (async () => {
       // Register the listener before draining the pending file so a warm
       // open arriving in between is never lost.
       const stop = await listen<string>('open-file', (event) => {
-        openPath(event.payload).catch((e) => setError(String(e)));
+        openFilePath(event.payload).catch((e) => setError(String(e)));
       });
       if (cancelled) {
         stop();
@@ -60,15 +41,13 @@ function App() {
       }
       unlisten = stop;
       const pending = await invoke<string | null>('take_pending_file');
-      if (pending) await openPath(pending);
+      if (pending) await openFilePath(pending);
     })().catch((e) => setError(String(e)));
     return () => {
       cancelled = true;
       unlisten?.();
     };
   }, [setTemplate]);
-
-  const fileName = filePath?.split('/').pop() ?? null;
 
   return (
     <div className="flex h-screen flex-col bg-white text-neutral-900">
@@ -84,19 +63,21 @@ function App() {
           <PanelLeft className="h-4 w-4" />
         </button>
         <button
-          className="rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
-          title="Open file…"
-          onClick={() => openFileDialog().catch((e) => setError(String(e)))}
+          className={`rounded p-1 hover:bg-neutral-100 hover:text-neutral-800 ${
+            view === 'home' ? 'text-neutral-800' : 'text-neutral-500'
+          }`}
+          title={view === 'home' && doc ? 'Back to the document' : 'Home'}
+          onClick={() => setView(view === 'home' && doc ? 'reader' : 'home')}
         >
-          <FolderOpen className="h-4 w-4" />
+          <House className="h-4 w-4" />
         </button>
-        {fileName && (
-          <span className="truncate text-[13px] font-medium text-neutral-700" title={filePath ?? ''}>
-            {fileName}
+        {doc && (
+          <span className="truncate text-[13px] font-medium text-neutral-700" title={doc.source}>
+            {doc.title}
           </span>
         )}
         <div data-tauri-drag-region className="flex-1" />
-        {filePath && view === 'reader' && (
+        {doc && view === 'reader' && (
           <button
             className="flex items-center gap-1.5 rounded bg-amber-500 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={annotationCount === 0}
@@ -130,20 +111,10 @@ function App() {
         <SettingsView />
       ) : view === 'export' ? (
         <ExportView />
-      ) : filePath ? (
-        <Reader />
+      ) : view === 'home' || !doc ? (
+        <Home />
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-neutral-400">
-          <FileText className="h-10 w-10" />
-          <p className="text-sm">Open a Markdown file to start reading.</p>
-          <button
-            className="rounded bg-amber-500 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-amber-600"
-            onClick={() => openFileDialog().catch((e) => setError(String(e)))}
-          >
-            Open File…
-          </button>
-          <DefaultAppCard />
-        </div>
+        <Reader />
       )}
     </div>
   );
