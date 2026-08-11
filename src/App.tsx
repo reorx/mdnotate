@@ -5,6 +5,14 @@ import { House, LoaderCircle, PanelLeft, PanelRight, Settings, SquareArrowOutUpR
 import { openSpec } from './lib/open-doc';
 import { loadSettings } from './lib/settings';
 import { isTauri } from './lib/tauri-env';
+import {
+  applyTheme,
+  cacheTheme,
+  resolveTheme,
+  syncWindowTheme,
+  systemPrefersDark,
+  watchSystemTheme,
+} from './lib/theme';
 import { useAppStore, type View } from './store';
 import { ExportView } from './components/ExportView';
 import { Home } from './components/Home';
@@ -20,9 +28,27 @@ function App() {
   const toggleAnnotations = useAppStore((s) => s.toggleAnnotations);
   const annotationCount = useAppStore((s) => s.annotations.length);
   const updateSettings = useAppStore((s) => s.updateSettings);
+  const theme = useAppStore((s) => s.settings.theme);
+  const setResolvedTheme = useAppStore((s) => s.setResolvedTheme);
   const error = useAppStore((s) => s.error);
   const setError = useAppStore((s) => s.setError);
   const opening = useAppStore((s) => s.opening);
+
+  // The whole of the theme's effect on the world: the class on <html>, the
+  // window's own appearance, and the cache the next cold start reads. Runs
+  // again on every OS change, which only alters anything while the preference
+  // is `system` — `resolveTheme` ignores the query otherwise.
+  useEffect(() => {
+    const apply = () => {
+      const resolved = resolveTheme(theme, systemPrefersDark());
+      applyTheme(resolved);
+      setResolvedTheme(resolved);
+    };
+    apply();
+    cacheTheme(theme);
+    syncWindowTheme(theme).catch(() => {});
+    return watchSystemTheme(apply);
+  }, [theme, setResolvedTheme]);
 
   useEffect(() => {
     loadSettings()
@@ -57,10 +83,10 @@ function App() {
   const overlay: Exclude<View, 'reader'> | null = view === 'reader' ? (doc ? null : 'home') : view;
 
   return (
-    <div className="flex h-screen flex-col bg-white text-neutral-900">
+    <div className="flex h-screen flex-col bg-page text-neutral-900">
       <header
         data-tauri-drag-region
-        className={`flex h-9 shrink-0 items-center gap-1.5 border-b border-neutral-200 px-2 ${isTauri ? 'pl-[72px]' : ''}`}
+        className={`relative flex h-9 shrink-0 items-center gap-1.5 border-b border-neutral-200 px-2 ${isTauri ? 'pl-[72px]' : ''}`}
       >
         <button
           className="rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
@@ -79,9 +105,18 @@ function App() {
           <House className="h-4 w-4" />
         </button>
         {doc && (
-          <span className="truncate text-[13px] font-medium text-neutral-700" title={doc.source}>
-            {doc.title}
-          </span>
+          // Centred on the window rather than on the space left by the two
+          // button groups, which are not the same width; `pointer-events-none`
+          // on the wrapper keeps the gaps around it draggable.
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span
+              data-tauri-drag-region
+              className="pointer-events-auto max-w-[45%] truncate text-[13px] font-medium text-neutral-700"
+              title={doc.source}
+            >
+              {doc.title}
+            </span>
+          </div>
         )}
         {opening && (
           <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-neutral-500" title={opening}>
@@ -92,7 +127,7 @@ function App() {
         <div data-tauri-drag-region className="flex-1" />
         {doc && view === 'reader' && (
           <button
-            className="flex items-center gap-1.5 rounded bg-amber-500 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded bg-amber-500 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40 dark:disabled:opacity-25"
             disabled={annotationCount === 0}
             title={annotationCount === 0 ? 'Highlight some text first' : undefined}
             onClick={() => setView('export')}
@@ -136,7 +171,7 @@ function App() {
           </div>
         )}
         {overlay && (
-          <div className="absolute inset-0 z-10 flex flex-col bg-white">
+          <div className="absolute inset-0 z-10 flex flex-col bg-page">
             {overlay === 'settings' ? <SettingsView /> : overlay === 'export' ? <ExportView /> : <Home />}
           </div>
         )}

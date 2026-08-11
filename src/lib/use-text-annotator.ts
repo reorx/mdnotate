@@ -7,6 +7,7 @@ import {
 } from '@recogito/text-annotator';
 import '@recogito/text-annotator/text-annotator.css';
 import { fromRecogitoAnnotation, toRecogitoAnnotation, type Annotation } from './annotations';
+import type { ResolvedTheme } from './theme';
 
 export { NOT_ANNOTATABLE_CLASS };
 
@@ -25,12 +26,28 @@ export interface UseTextAnnotatorOptions {
   /** Recreate the annotator when the underlying document changes. */
   documentKey?: string | null;
   annotations: Annotation[];
+  /** Highlights are blended into the page, so they depend on what is under them. */
+  theme: ResolvedTheme;
   onCreate: (annotation: Annotation) => void;
   onRemove: (id: string) => void;
   onSetComment: (id: string, comment: string | null) => void;
 }
 
 const POPUP_WIDTH = 260;
+
+/**
+ * The same amber either way; what changes is how much of it survives the blend.
+ * The highlight layer is `multiply` on a light page and `screen` on a dark one
+ * (see App.css), and screen over near-black needs a little more to read as the
+ * same wash.
+ */
+function highlightStyle(theme: ResolvedTheme) {
+  const [resting, selected] = theme === 'dark' ? [0.3, 0.55] : [0.22, 0.4];
+  return (_annotation: TextAnnotation, state?: { selected?: boolean }) => ({
+    fill: '#f59e0b',
+    fillOpacity: state?.selected ? selected : resting,
+  });
+}
 
 /**
  * Thin React wrapper over @recogito/text-annotator for a single document.
@@ -42,6 +59,7 @@ export function useTextAnnotator({
   enabled,
   documentKey,
   annotations,
+  theme,
   onCreate,
   onRemove,
   onSetComment,
@@ -56,6 +74,8 @@ export function useTextAnnotator({
   // inside an action never observes a stale draft.
   const popupRef = useRef<AnnotationPopupState | null>(null);
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
 
   const setPopupState = (next: AnnotationPopupState | null) => {
     popupRef.current = next;
@@ -68,10 +88,7 @@ export function useTextAnnotator({
 
     const anno = createTextAnnotator<TextAnnotation, TextAnnotation>(el, {
       renderer: 'SPANS',
-      style: (_annotation, state) => ({
-        fill: '#f59e0b',
-        fillOpacity: state?.selected ? 0.4 : 0.22,
-      }),
+      style: highlightStyle(themeRef.current),
     });
     anno.setAnnotations(annotationsRef.current.map(toRecogitoAnnotation));
     annoRef.current = anno;
@@ -162,6 +179,13 @@ export function useTextAnnotator({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, documentKey]);
+
+  // Restyling in place rather than through the effect above: rebuilding the
+  // annotator on a theme change would throw away the draft and the selection.
+  // `setStyle` redraws the existing highlights.
+  useEffect(() => {
+    annoRef.current?.setStyle(highlightStyle(theme));
+  }, [theme]);
 
   const commitDraft = (comment: string | null) => {
     const anno = annoRef.current;

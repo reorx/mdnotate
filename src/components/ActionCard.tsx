@@ -62,10 +62,10 @@ export function CardButton({
   const style =
     variant === 'primary'
       ? 'bg-amber-500 text-white hover:bg-amber-600'
-      : 'border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100';
+      : 'border border-neutral-300 bg-page text-neutral-700 hover:bg-neutral-100';
   return (
     <button
-      className={`shrink-0 rounded px-2.5 py-1 text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-40 ${style}`}
+      className={`shrink-0 rounded px-2.5 py-1 text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-40 dark:disabled:opacity-25 ${style}`}
       type={type}
       disabled={disabled}
       onClick={onClick}

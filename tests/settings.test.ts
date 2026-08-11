@@ -19,10 +19,15 @@ describe('mergeSettings', () => {
     expect(merged.typography.text).toEqual(DEFAULT_SETTINGS.typography.text);
   });
 
+  it('keeps a stored theme preference', () => {
+    expect(mergeSettings({ theme: 'dark' }).theme).toBe('dark');
+  });
+
   // A hand-edited settings.json must never be able to keep the reader shut.
   it('falls back for values of the wrong type instead of throwing', () => {
-    const merged = mergeSettings({ template: 42, typography: 'large' });
+    const merged = mergeSettings({ template: 42, typography: 'large', theme: 'sepia' });
     expect(merged.template).toBe(DEFAULT_TEMPLATE);
     expect(merged.typography).toEqual(DEFAULT_SETTINGS.typography);
+    expect(merged.theme).toBe(DEFAULT_SETTINGS.theme);
   });
 });

@@ -1,5 +1,22 @@
 @import 'tailwindcss';
 
+/* Dark mode is a class on <html>, not a media query: the preference has three
+   values and only one of them is "ask the OS". `lib/theme.ts` puts it there. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Two surfaces the neutral ramp below cannot express, because in light mode
+ * they are white and `--color-white` has to stay white — it is also the text
+ * colour on every amber button.
+ *
+ *   page    the app background, and anything inset into it (inputs, textareas)
+ *   raised  what floats above it: the annotation popup, the active segment
+ */
+@theme {
+  --color-page: #ffffff;
+  --color-raised: #ffffff;
+}
+
 :root {
   font-family:
     system-ui,
@@ -12,15 +29,105 @@
     sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+
+  /* The prose palette. Every colour `.prose-dense` / `.prose-plain` paints with
+     is named here so the dark block below is the only other place it appears. */
+  --prose-text: #1a1a1a;
+  --prose-rule: #eeeeee;
+  --prose-code-bg: #f3f3f2;
+  --prose-pre-bg: #f8f8f7;
+  --prose-pre-border: #ececea;
+  --prose-quote-border: #d9d9d6;
+  --prose-quote-text: #555555;
+  --prose-table-border: #e2e2e0;
+  --prose-table-head-bg: #f7f7f6;
+  --prose-link: #b45309;
+  --prose-hr: #e5e5e3;
+  --prose-selection: rgb(245 158 11 / 0.25);
+}
+
+/*
+ * Dark mode, by inverting the neutral ramp rather than by writing a `dark:`
+ * variant next to all ~130 colour utilities in the components.
+ *
+ * It works because the app uses `neutral-*` as one consistent scale — distance
+ * from the page background — and that is exactly what inverts: 50 is the
+ * sidebar, 100 the hover, 200/300 the borders, 400/500 the quiet text, 700/800
+ * the loud text. Redefining the variables here flips every one of them at once,
+ * and a component written tomorrow gets dark mode without being asked.
+ *
+ * The tints are the exception: `amber-50/100` and `red-50/200` are washes that
+ * would glare on a dark page, and `amber-700` / `red-700` are the text on those
+ * washes, so both ends swap roles. Anything used only as a foreground on a solid
+ * button (amber-500/600, white) is left alone.
+ */
+.dark {
+  --color-page: #1a1a1b;
+  --color-raised: #333335;
+
+  --color-neutral-50: #232324;
+  --color-neutral-100: #2c2c2e;
+  --color-neutral-200: #3a3a3c;
+  --color-neutral-300: #48484a;
+  --color-neutral-400: #7a7a7e;
+  --color-neutral-500: #9b9b9f;
+  --color-neutral-600: #b4b4b8;
+  --color-neutral-700: #d4d4d6;
+  --color-neutral-800: #e8e8ea;
+  --color-neutral-900: #f2f2f4;
+
+  --color-amber-50: #3a2c0f;
+  --color-amber-100: #4a3813;
+  --color-amber-700: #fbbf24;
+
+  --color-red-50: #3a1d1d;
+  --color-red-200: #5a2a2a;
+  --color-red-500: #f87171;
+  --color-red-600: #f87171;
+  --color-red-700: #fca5a5;
+
+  --color-green-600: #4ade80;
+
+  --prose-text: #e6e6e4;
+  --prose-rule: #3a3a3c;
+  --prose-code-bg: #2c2c2e;
+  --prose-pre-bg: #232324;
+  --prose-pre-border: #3a3a3c;
+  --prose-quote-border: #4a4a4c;
+  --prose-quote-text: #a8a8a6;
+  --prose-table-border: #3a3a3c;
+  --prose-table-head-bg: #2a2a2c;
+  --prose-link: #fbbf24;
+  --prose-hr: #3a3a3c;
+  --prose-selection: rgb(245 158 11 / 0.32);
+}
+
+/*
+ * The highlight layer is composited with `mix-blend-mode: multiply`, which on a
+ * dark page multiplies dark by dark and leaves nothing to see. `screen` is the
+ * same idea the other way up: it lifts the background instead of deepening it,
+ * so the text still reads through the highlight.
+ */
+.dark .r6o-annotatable .r6o-span-highlight-layer {
+  mix-blend-mode: screen;
+}
+
+/* The library ships a global `::selection` of 18%-opacity blue, which all but
+   disappears on a dark background. Prose overrides it below; this is for the
+   text outside the reader. */
+.dark ::selection {
+  background: rgb(255 255 255 / 0.22);
 }
 
 /*
  * Dense reading typography. Deliberately tighter than typical prose themes:
  * the app is a reader, so information density beats airiness.
  *
- * The three --prose-* properties below are injected by `typographyVars()` from
- * `lib/typography.ts`, which also holds the defaults these used to hardcode.
- * Every element that renders prose sits under a node that provides them.
+ * --prose-font-size / --prose-line-height / --prose-width are injected per
+ * element by `typographyVars()` from `lib/typography.ts`, which also holds the
+ * defaults these used to hardcode. Every element that renders prose sits under
+ * a node that provides them. The --prose-* colours come from the blocks above
+ * instead, since they follow the theme rather than the document.
  */
 .prose-column {
   max-width: var(--prose-width);
@@ -29,7 +136,7 @@
 .prose-dense {
   font-size: var(--prose-font-size);
   line-height: var(--prose-line-height);
-  color: #1a1a1a;
+  color: var(--prose-text);
   overflow-wrap: break-word;
 }
 
@@ -52,7 +159,7 @@
 .prose-dense h2 {
   font-size: 1.25em;
   padding-bottom: 0.15em;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--prose-rule);
 }
 .prose-dense h3 {
   font-size: 1.1em;
@@ -93,14 +200,14 @@
 .prose-dense code {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 0.87em;
-  background: #f3f3f2;
+  background: var(--prose-code-bg);
   padding: 0.1em 0.35em;
   border-radius: 3px;
 }
 
 .prose-dense pre {
-  background: #f8f8f7;
-  border: 1px solid #ececea;
+  background: var(--prose-pre-bg);
+  border: 1px solid var(--prose-pre-border);
   border-radius: 5px;
   padding: 0.6em 0.8em;
   overflow-x: auto;
@@ -115,9 +222,9 @@
 }
 
 .prose-dense blockquote {
-  border-left: 3px solid #d9d9d6;
+  border-left: 3px solid var(--prose-quote-border);
   padding-left: 0.8em;
-  color: #555;
+  color: var(--prose-quote-text);
 }
 
 .prose-dense table {
@@ -126,17 +233,17 @@
 }
 .prose-dense th,
 .prose-dense td {
-  border: 1px solid #e2e2e0;
+  border: 1px solid var(--prose-table-border);
   padding: 0.3em 0.6em;
   text-align: left;
 }
 .prose-dense th {
-  background: #f7f7f6;
+  background: var(--prose-table-head-bg);
   font-weight: 600;
 }
 
 .prose-dense a {
-  color: #b45309;
+  color: var(--prose-link);
   text-decoration: none;
 }
 .prose-dense a:hover {
@@ -149,12 +256,12 @@
 
 .prose-dense hr {
   border: none;
-  border-top: 1px solid #e5e5e3;
+  border-top: 1px solid var(--prose-hr);
   margin: 1.2em 0;
 }
 
 .prose-dense ::selection {
-  background: rgba(245, 158, 11, 0.25);
+  background: var(--prose-selection);
 }
 
 /* Plain text: shown as written, wrapped so long lines stay readable without a
@@ -165,12 +272,12 @@
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: var(--prose-font-size);
   line-height: var(--prose-line-height);
-  color: #1a1a1a;
+  color: var(--prose-text);
   white-space: pre-wrap;
   overflow-wrap: break-word;
   tab-size: 4;
 }
 
 .prose-plain ::selection {
-  background: rgba(245, 158, 11, 0.25);
+  background: var(--prose-selection);
 }

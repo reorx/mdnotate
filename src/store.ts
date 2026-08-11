@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { removeAnnotation, setAnnotationComment, upsertAnnotation, type Annotation } from './lib/annotations';
 import type { OpenDoc } from './lib/recent-docs';
 import { DEFAULT_SETTINGS, type Settings } from './lib/settings';
+import { readCachedTheme, resolveTheme, systemPrefersDark, type ResolvedTheme } from './lib/theme';
 
 export type View = 'home' | 'reader' | 'export' | 'settings';
 
@@ -14,6 +15,13 @@ interface AppState {
   annotations: Annotation[];
   /** The persisted preferences, mirrored here so the UI reads them synchronously. */
   settings: Settings;
+  /**
+   * `settings.theme` with `system` already resolved. Derived, but kept here
+   * because the OS half of it is only observed in one effect, and the parts
+   * that need it — the highlight blending, the note under the theme picker —
+   * are nowhere near that effect.
+   */
+  resolvedTheme: ResolvedTheme;
   /** Message for the banner under the toolbar; null when there is nothing wrong. */
   error: string | null;
   /** What is being fetched right now, shown in the toolbar; null when nothing is. */
@@ -28,7 +36,18 @@ interface AppState {
   removeAnnotationById: (id: string) => void;
   setComment: (id: string, comment: string | null) => void;
   updateSettings: (patch: Partial<Settings>) => void;
+  setResolvedTheme: (theme: ResolvedTheme) => void;
 }
+
+/**
+ * The theme is the one setting that cannot wait for `loadSettings()`: the whole
+ * window is painted in it, and the effect that keeps it in sync writes the
+ * current value back to the cache. Seeded from the default, that effect would
+ * put `system` over the stored preference before the stored preference had even
+ * been read — which in the browser, where the cache *is* the store, loses it for
+ * good. So the store starts where `main.tsx` already painted: at the cache.
+ */
+const cachedTheme = readCachedTheme();
 
 export const useAppStore = create<AppState>((set) => ({
   doc: null,
@@ -36,7 +55,8 @@ export const useAppStore = create<AppState>((set) => ({
   sidebarOpen: true,
   annotationsOpen: false,
   annotations: [],
-  settings: DEFAULT_SETTINGS,
+  settings: { ...DEFAULT_SETTINGS, theme: cachedTheme },
+  resolvedTheme: resolveTheme(cachedTheme, systemPrefersDark()),
   error: null,
   opening: null,
   // A successful open clears whatever went wrong last time. Annotations arrive
@@ -56,4 +76,5 @@ export const useAppStore = create<AppState>((set) => ({
   setComment: (id, comment) =>
     set((s) => ({ annotations: setAnnotationComment(s.annotations, id, comment, Date.now()) })),
   updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
+  setResolvedTheme: (resolvedTheme) => set({ resolvedTheme }),
 }));

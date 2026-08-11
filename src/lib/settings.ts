@@ -1,6 +1,7 @@
 import { load } from '@tauri-apps/plugin-store';
 import { isTauri } from './tauri-env';
 import { DEFAULT_TEMPLATE } from './template';
+import { clampTheme, DEFAULT_THEME, type ThemePreference } from './theme';
 import { clampTypographySettings, DEFAULT_TYPOGRAPHY, type TypographySettings } from './typography';
 
 const STORE_FILE = 'settings.json';
@@ -8,15 +9,17 @@ const STORE_FILE = 'settings.json';
 export interface Settings {
   template: string;
   typography: TypographySettings;
+  theme: ThemePreference;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   template: DEFAULT_TEMPLATE,
   typography: DEFAULT_TYPOGRAPHY,
+  theme: DEFAULT_THEME,
 };
 
 /** Stored one entry per key, so writing one setting never rewrites the others. */
-const KEYS = ['template', 'typography'] as const;
+const KEYS = ['template', 'typography', 'theme'] as const;
 
 type StoredSettings = Partial<Record<keyof Settings, unknown>>;
 
@@ -29,6 +32,7 @@ export function mergeSettings(stored: StoredSettings): Settings {
   return {
     template: typeof stored.template === 'string' ? stored.template : DEFAULT_SETTINGS.template,
     typography: clampTypographySettings(stored.typography),
+    theme: clampTheme(stored.theme),
   };
 }
 

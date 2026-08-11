@@ -18,7 +18,7 @@ src/lib/          纯逻辑 + hook：annotations（数据模型、失效判定�
                   open-doc（打开文档的唯一入口）、annotate（改动标注的唯一入口）、
                   path-input（手输/粘贴路径的归一化规则）、
                   doc-locator（本地/ssh/链接的语法与格式判定，纯逻辑）、
-                  clipboard、use-text-annotator（recogito 封装）、settings、
+                  clipboard、use-text-annotator（recogito 封装）、settings、theme（偏好解析与落地）、
                   default-app、tauri-env、sample-doc
 src/components/   Home（首页）、OpenFileCard、ClipboardCard、RecentList、DefaultAppCard、
                   ActionCard（首页三张卡片共用的壳 + CardNote/CardButton）、
@@ -69,7 +69,11 @@ pnpm tauri build   # 产出 .app 与 .dmg
 - **标注必须与文档同时进 store**：`use-text-annotator` 只在 effect 创建时 `setAnnotations` 一次（deps 只有 `enabled`/`documentKey`），异步晚到的标注不会被渲染，所以 `openDoc(doc, annotations)` 是一次性写入的。
 - **排版**：`src/App.css` 的 `.prose-dense`，默认刻意紧凑（15px / 1.6 行高），追求信息密度而非留白。字号 / 行高 / 栏宽三项可在设置页调，**Markdown 与纯文本各存一套**（key 就是 `DocFormat`，设置页两个 tab，打开设置时默认停在当前文档的那一套）。传导链路只有一条：`typography.ts` 的 `typographyVars()` → 三个 `--prose-*` 自定义属性 → Reader 的滚动容器 inline style（设置页的预览块用同一个函数，所见即所得）。**默认值只写在 `DEFAULT_TYPOGRAPHY` 一处，CSS 里不留第二份**，所以 `.prose-dense` / `.prose-plain` / `.prose-column` 用的是不带 fallback 的 `var()` —— 新增渲染 prose 的地方必须挂在一个提供了这三个变量的节点下。`.prose-dense` 内部全是 `em`，动根字号整套层级自动等比缩放；`pre` 的行高是 `calc(var(--prose-line-height) - 0.1)`，当初刻意的是那 0.1 的差，不是绝对值。栏宽单位是 rem（不随字号联动），滑块最右一格越界即 `'full'`（`widthFromSlider`），左右 `px-8` 内边距恒定不参与调节。
 - **设置的读写**：`settings.ts` 是通用 kv —— `loadSettings()` / `saveSettings(patch)`，底层一个 key 一个 entry（plugin-store，浏览器降级 localStorage 存 JSON），加新设置项不会重写旧的。读回来一律过 `mergeSettings` 逐字段校验（typography 走 `clampTypography`，越界值 clamp、坏类型退默认、按 step 精度取整）：**手改坏 settings.json 不该让阅读器打不开**。store 里对应的是整个 `settings` 对象 + `updateSettings(patch)`。排版滑块是即时生效 + 防抖 200ms 落盘，`SettingsView` 卸载时会 flush 未落盘的改动，否则「拖完立刻点 Back」会丢最后一次。
-- **浏览器降级**：`src/lib/tauri-env.ts` 的 `isTauri` 判断，让 UI 可以在纯浏览器里迭代（示例文档 / localStorage / navigator.clipboard）。
+- **深色模式靠反转调色板，不靠 `dark:` 变体**：Tailwind v4 的颜色都编译成 `var(--color-*)`，所以 `App.css` 的 `.dark` 块重新定义整条 `neutral-*` 阶梯就一次性翻转了全部约 130 处颜色 class，组件的 className **一处没改**。成立的前提是本项目把 neutral 当作一条严格的「离页面底色多远」的阶梯用（50 侧栏 / 100 hover / 200-300 边框 / 400-500 弱文字 / 700-800 强文字）——新写组件用同一套阶梯就自动有深色，**不要**再去补 `dark:`。三类例外：① `bg-white` 既是页面底也是琥珀按钮上的 `text-white`，`--color-white` 动不得，所以拆出 `bg-page`（页面底 + 内凹的输入框）和 `bg-raised`（浮在上面的弹窗 / 选中的分段）两个 `@theme` token；② `amber-50/100`、`red-50/200` 是底色，`amber-700`/`red-700` 是它们上面的字，深色下两头对调；③ 只做纯前景的（amber-500/600、white）原样不动。`.prose-*` 的颜色则全部抽成 `:root` 里的 `--prose-*` 变量，`.dark` 给第二套。唯一用到 `dark:` 的地方是 disabled 按钮的不透明度：同一个 40% 压得住白底、压不住近黑的底。
+- **主题的三处副作用**：`lib/theme.ts` 是唯一出口 —— `<html>` 上的 `.dark` class（驱动样式表）、`color-scheme`（驱动样式表够不着的滚动条 / 光标 / range 轨道）、以及 Tauri 的 `getCurrentWindow().setTheme()`（驱动原生右键菜单、文本选择菜单、traffic light；`null` 才是「跟随系统」）。**`core:window:allow-set-theme` 不在 `core:default` 里**，和 `sql:allow-execute` 同一类坑。`setTheme('dark')` 会连带把 webview 的 `prefers-color-scheme` 也改成 dark，但只有 `preference === 'system'` 时才去读那个 query，而那时 `setTheme(null)` 正让它跟随系统，所以不会自锁。
+- **主题必须在第一帧就对**：真正的设置在异步 IPC 后面，所以 `theme` 额外在 `localStorage` 存一份同步可读的镜像，`main.tsx` 在 React 渲染前就 `applyTheme()`，消除冷启动闪白。**代价是 store 的初始 `settings.theme` 必须从这份缓存种子（而不是 `DEFAULT_SETTINGS`）**：同步主题的 effect 会把当前值写回缓存，若它带着默认值 `system` 先跑一轮，就会在 `loadSettings()` 读到之前把真实偏好覆盖掉 —— 浏览器模式下缓存就是存储，偏好会被永久抹掉。缓存的 key 和 JSON 编码与 `settings.ts` 的浏览器降级完全一致，两条路径写的是同一个东西（有测试锁住）。
+- **深色下的高亮**：recogito 的高亮层是 `mix-blend-mode: multiply`，在深色底上等于隐形（暗乘暗只会更暗），`.dark` 里必须换成 `screen`；不透明度也要跟着提（`highlightStyle()`）。改样式用 `anno.setStyle()` 热更新（内部会 `redraw(true)`），**不要**因为主题变了去重建 annotator —— 那会丢掉草稿和选区。库还全局注入了一条 18% 蓝的 `::selection`，深色下几乎看不见，也在 `.dark` 里盖掉了。
+- **浏览器降级**：`src/lib/tauri-env.ts` 的 `isTauri` 判断，让 UI 可以在纯浏览器里迭代（示例文档 / localStorage / navigator.clipboard）。**深色模式的验收可以走这条路**：`pnpm dev` + agent-browser，`agent-browser set media dark|light` 直接模拟系统偏好（headless Chrome 默认就是 dark）。
 
 ## 发布
 

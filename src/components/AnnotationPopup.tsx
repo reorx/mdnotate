@@ -60,7 +60,7 @@ export function AnnotationPopup({
         }}
         rows={3}
         placeholder="Write a comment… (Enter to save)"
-        className="w-full resize-none rounded border border-neutral-300 bg-white px-2 py-1 text-[13px] leading-snug outline-none focus:border-amber-500"
+        className="w-full resize-none rounded border border-neutral-300 bg-page px-2 py-1 text-[13px] leading-snug outline-none focus:border-amber-500"
       />
       <div className="flex justify-end gap-1">
         <button
@@ -81,7 +81,7 @@ export function AnnotationPopup({
 
   return (
     <div
-      className={`${NOT_ANNOTATABLE_CLASS} absolute z-20 w-[260px] rounded-md border border-neutral-200 bg-white p-1.5 shadow-lg`}
+      className={`${NOT_ANNOTATABLE_CLASS} absolute z-20 w-[260px] rounded-md border border-neutral-200 bg-raised p-1.5 shadow-lg`}
       style={{ top: popup.position.top + 6, left: popup.position.left }}
     >
       {popup.kind === 'draft' ? (

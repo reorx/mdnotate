@@ -55,7 +55,7 @@ export function ExportView() {
       <textarea
         readOnly
         value={output}
-        className="min-h-0 flex-1 resize-none bg-white p-4 font-mono text-[13px] leading-relaxed text-neutral-800 outline-none"
+        className="min-h-0 flex-1 resize-none bg-page p-4 font-mono text-[13px] leading-relaxed text-neutral-800 outline-none"
       />
     </div>
   );

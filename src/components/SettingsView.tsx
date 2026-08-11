@@ -4,6 +4,7 @@ import { ArrowLeft, RotateCcw } from 'lucide-react';
 import type { DocFormat } from '../lib/doc-locator';
 import { saveSettings, type Settings } from '../lib/settings';
 import { DEFAULT_TEMPLATE } from '../lib/template';
+import type { ThemePreference } from '../lib/theme';
 import {
   clampTypography,
   DEFAULT_TYPOGRAPHY,
@@ -21,9 +22,15 @@ import { useAppStore } from '../store';
 /** How long after the last drag the sliders reach the disk. */
 const SAVE_DELAY = 200;
 
-const TABS: { format: DocFormat; label: string }[] = [
-  { format: 'markdown', label: 'Markdown' },
-  { format: 'text', label: 'Plain text' },
+const TABS: SegmentedOption<DocFormat>[] = [
+  { value: 'markdown', label: 'Markdown' },
+  { value: 'text', label: 'Plain text' },
+];
+
+const THEMES: SegmentedOption<ThemePreference>[] = [
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'system', label: 'System' },
 ];
 
 const PREVIEW_MARKDOWN = `### A heading to size against
@@ -40,6 +47,8 @@ const PREVIEW_TEXT = `2026-08-11 22:04:11  INFO   started, reading config
 export function SettingsView() {
   const template = useAppStore((s) => s.settings.template);
   const typography = useAppStore((s) => s.settings.typography);
+  const theme = useAppStore((s) => s.settings.theme);
+  const resolvedTheme = useAppStore((s) => s.resolvedTheme);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const docFormat = useAppStore((s) => s.doc?.format ?? null);
   const setView = useAppStore((s) => s.setView);
@@ -69,6 +78,14 @@ export function SettingsView() {
     pending.current = { ...pending.current, ...patch };
     if (timer.current !== null) clearTimeout(timer.current);
     timer.current = window.setTimeout(flush, SAVE_DELAY);
+  };
+
+  // No debounce: a theme is picked, not dragged, and the whole window changes
+  // the moment it lands — a write that arrives 200ms later would be the only
+  // part of it that lags.
+  const applyTheme = (value: ThemePreference) => {
+    updateSettings({ theme: value });
+    saveSettings({ theme: value }).catch(() => {});
   };
 
   const saveTemplate = async (value: string) => {
@@ -101,27 +118,22 @@ export function SettingsView() {
         <h2 className="text-[13px] font-medium text-neutral-800">Settings</h2>
       </div>
       <div className="mx-auto w-full max-w-[42rem] flex-1 overflow-y-auto px-6 py-5">
+        <h3 className="mb-1 text-[13px] font-medium text-neutral-800">Appearance</h3>
+        <p className="mb-2.5 text-[12px] leading-snug text-neutral-500">
+          Light, dark, or whichever the system is on
+          {theme === 'system' && <> — right now that is {resolvedTheme}</>}.
+        </p>
+        <Segmented options={THEMES} value={theme} onChange={applyTheme} />
+
+        <div className="mt-7 border-t border-neutral-200 pt-5" />
+
         <h3 className="mb-1 text-[13px] font-medium text-neutral-800">Typography</h3>
         <p className="mb-2.5 text-[12px] leading-snug text-neutral-500">
           How the reading pane is set. Markdown and plain text keep their own sizes — a log is not read the way prose
           is.
         </p>
 
-        <div className="mb-3 inline-flex gap-0.5 rounded bg-neutral-100 p-0.5">
-          {TABS.map((t) => (
-            <button
-              key={t.format}
-              className={`rounded px-2.5 py-1 text-[12px] ${
-                tab === t.format
-                  ? 'bg-white font-medium text-neutral-800 shadow-sm'
-                  : 'text-neutral-500 hover:text-neutral-700'
-              }`}
-              onClick={() => setTab(t.format)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <Segmented options={TABS} value={tab} onChange={setTab} className="mb-3" />
 
         <div className="flex flex-col gap-2">
           <Slider
@@ -202,6 +214,42 @@ export function SettingsView() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+interface SegmentedOption<T extends string> {
+  value: T;
+  label: string;
+}
+
+/** A row of mutually exclusive choices, small enough to sit inline with prose. */
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  className = '',
+}: {
+  options: SegmentedOption<T>[];
+  value: T;
+  onChange: (value: T) => void;
+  className?: string;
+}) {
+  return (
+    <div className={`inline-flex gap-0.5 rounded bg-neutral-100 p-0.5 ${className}`}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          className={`rounded px-2.5 py-1 text-[12px] ${
+            value === option.value
+              ? 'bg-raised font-medium text-neutral-800 shadow-sm'
+              : 'text-neutral-500 hover:text-neutral-700'
+          }`}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }

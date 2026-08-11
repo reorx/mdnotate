@@ -33,7 +33,7 @@ export function OpenFileCard() {
         onSubmit={(e) => void submit(e).catch((err) => setError(String(err)))}
       >
         <input
-          className="min-w-0 flex-1 rounded border border-neutral-300 bg-white px-2 py-1 text-[12px] text-neutral-700 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none"
+          className="min-w-0 flex-1 rounded border border-neutral-300 bg-page px-2 py-1 text-[12px] text-neutral-700 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none"
           value={path}
           onChange={(e) => setPath(e.target.value)}
           placeholder="…or paste /a/path or host:path"

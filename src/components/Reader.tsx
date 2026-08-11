@@ -18,6 +18,7 @@ export function Reader() {
   const annotationsOpen = useAppStore((s) => s.annotationsOpen);
   const annotations = useAppStore((s) => s.annotations);
   const typography = useAppStore((s) => s.settings.typography[format]);
+  const theme = useAppStore((s) => s.resolvedTheme);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [toc, setToc] = useState<TocItem[]>([]);
@@ -28,6 +29,7 @@ export function Reader() {
     enabled: !!content,
     documentKey: docId,
     annotations,
+    theme,
     onCreate: createAnnotation,
     onRemove: deleteAnnotation,
     onSetComment: updateComment,
