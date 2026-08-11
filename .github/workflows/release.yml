@@ -25,13 +25,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      # 顺序不可换：setup-node 的 cache: pnpm 需要 pnpm 已存在才能解析 store 路径
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -55,7 +56,7 @@ jobs:
       - name: Add Rust targets for universal build
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-      - uses: swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
 
@@ -78,7 +79,7 @@ jobs:
           codesign -dvv "$APP" 2>&1 | grep -E "Authority=Developer ID|runtime|Timestamp"
           spctl -a -vv -t exec "$APP"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mdnotate-dmg
           path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
