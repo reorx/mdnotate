@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expandHome, normalizePathInput, pathInputError } from '../src/lib/path-input';
+import { expandHome, normalizePathInput } from '../src/lib/path-input';
 
 const HOME = '/Users/me';
 
@@ -54,6 +54,18 @@ describe('normalizePathInput', () => {
   it('returns nothing for input that is only whitespace', () => {
     expect(normalizePathInput('   \n ')).toBe('');
   });
+
+  // A link is not a dialect of a path — it is unwrapped by `doc-locator`, which
+  // has to see the percent escapes intact to decode them as a URL would.
+  it('hands an mdnotate link on untouched', () => {
+    expect(normalizePathInput(' mdnotate://open?path=maiev.ts%3ASync%2Fa.md ')).toBe(
+      'mdnotate://open?path=maiev.ts%3ASync%2Fa.md',
+    );
+  });
+
+  it('leaves an scp-style remote path alone', () => {
+    expect(normalizePathInput('maiev.ts:Sync/My Notes/a.md')).toBe('maiev.ts:Sync/My Notes/a.md');
+  });
 });
 
 describe('expandHome', () => {
@@ -79,23 +91,5 @@ describe('expandHome', () => {
 
   it('leaves an ordinary absolute path alone', () => {
     expect(expandHome('/tmp/a b.md', HOME)).toBe('/tmp/a b.md');
-  });
-});
-
-describe('pathInputError', () => {
-  it('accepts an absolute path containing spaces', () => {
-    expect(pathInputError('/Users/me/My Notes/a.md')).toBeNull();
-  });
-
-  it('asks for a path when the box is empty', () => {
-    expect(pathInputError('')).toMatch(/path/i);
-  });
-
-  it('rejects a relative path', () => {
-    expect(pathInputError('notes/a.md')).toMatch(/absolute/i);
-  });
-
-  it('rejects a ~ that could not be expanded', () => {
-    expect(pathInputError('~/a.md')).toMatch(/absolute/i);
   });
 });

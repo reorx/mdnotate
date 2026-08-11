@@ -6,6 +6,10 @@
  * keeps its quotes, copied from a browser it is a `file://` URL, and typed by
  * hand it usually starts at `~`. Spaces are ordinary characters in all of them,
  * so nothing here ever splits on whitespace — it is only trimmed at the ends.
+ *
+ * This only undresses the path. What it then means — a local file, a file on
+ * another machine, or nothing openable — is `doc-locator`'s to say, and an
+ * `mdnotate://` link passes through here untouched for it to unwrap.
  */
 
 const FILE_URL = /^file:\/\/(?:localhost)?/;
@@ -54,11 +58,4 @@ export function expandHome(path: string, home: string): string {
   if (path !== '~' && !path.startsWith('~/')) return path;
   const base = home.replace(/\/+$/, '');
   return base ? base + path.slice(1) : path;
-}
-
-/** Why a normalized path cannot be opened, or `null` when it can be. */
-export function pathInputError(path: string): string | null {
-  if (!path) return 'Enter the path to a Markdown file';
-  if (!path.startsWith('/')) return 'Enter an absolute path, starting with / or ~';
-  return null;
 }

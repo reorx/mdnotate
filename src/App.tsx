@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { House, PanelLeft, Settings, SquareArrowOutUpRight } from 'lucide-react';
-import { openFilePath } from './lib/open-doc';
+import { House, LoaderCircle, PanelLeft, Settings, SquareArrowOutUpRight } from 'lucide-react';
+import { openSpec } from './lib/open-doc';
 import { loadTemplate } from './lib/settings';
 import { isTauri } from './lib/tauri-env';
 import { useAppStore } from './store';
@@ -21,6 +21,7 @@ function App() {
   const setTemplate = useAppStore((s) => s.setTemplate);
   const error = useAppStore((s) => s.error);
   const setError = useAppStore((s) => s.setError);
+  const opening = useAppStore((s) => s.opening);
 
   useEffect(() => {
     loadTemplate()
@@ -30,18 +31,18 @@ function App() {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     (async () => {
-      // Register the listener before draining the pending file so a warm
+      // Register the listener before draining the pending document so a warm
       // open arriving in between is never lost.
-      const stop = await listen<string>('open-file', (event) => {
-        openFilePath(event.payload).catch((e) => setError(String(e)));
+      const stop = await listen<string>('open-doc', (event) => {
+        openSpec(event.payload).catch((e) => setError(String(e)));
       });
       if (cancelled) {
         stop();
         return;
       }
       unlisten = stop;
-      const pending = await invoke<string | null>('take_pending_file');
-      if (pending) await openFilePath(pending);
+      const pending = await invoke<string | null>('take_pending_doc');
+      if (pending) await openSpec(pending);
     })().catch((e) => setError(String(e)));
     return () => {
       cancelled = true;
@@ -74,6 +75,12 @@ function App() {
         {doc && (
           <span className="truncate text-[13px] font-medium text-neutral-700" title={doc.source}>
             {doc.title}
+          </span>
+        )}
+        {opening && (
+          <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-neutral-500" title={opening}>
+            <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
+            <span className="truncate">Opening {opening}</span>
           </span>
         )}
         <div data-tauri-drag-region className="flex-1" />

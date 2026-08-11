@@ -2,11 +2,14 @@
  * The recent-documents model and every pure rule around it: how a clipboard
  * paste gets a name, how it is previewed, and how entries are identified.
  *
- * Identity carries the dedup rule — files collapse by path, clipboard entries
- * collapse by content — so the storage layer only ever upserts on `id`.
+ * Identity carries the dedup rule — files collapse by path, remote files by
+ * host and path together, clipboard entries by content — so the storage layer
+ * only ever upserts on `id`.
  */
 
-export type DocKind = 'file' | 'clipboard';
+import type { DocFormat } from './doc-locator';
+
+export type DocKind = 'file' | 'ssh' | 'clipboard';
 
 /** A document currently open in the reader. */
 export interface OpenDoc {
@@ -15,9 +18,11 @@ export interface OpenDoc {
   kind: DocKind;
   /** Shown in the title bar. */
   title: string;
-  /** What `{{filePath}}` renders to: the full path for files, the title for clipboard entries. */
+  /** What `{{filePath}}` renders to: the path for files, `host:path` for remote ones, the title for clipboard entries. */
   source: string;
   content: string;
+  /** Whether to render it as Markdown or show it as it is. */
+  format: DocFormat;
   /** Hash of `content`. Annotations stored under any other hash were made on text that has since changed. */
   contentHash: string;
 }
@@ -92,6 +97,11 @@ export function hashText(text: string): string {
 
 export function fileDocId(path: string): string {
   return `file:${path}`;
+}
+
+/** The host belongs in the id: the same path on two machines is two documents. */
+export function sshDocId(host: string, path: string): string {
+  return `ssh:${host}:${path}`;
 }
 
 export function clipboardDocId(text: string): string {

@@ -1,7 +1,17 @@
 import { invoke } from '@tauri-apps/api/core';
+import { homeDir } from '@tauri-apps/api/path';
 import { open as showOpenDialog } from '@tauri-apps/plugin-dialog';
 import { useAppStore } from '../store';
 import { restoreAnnotations } from './annotations-db';
+import {
+  formatLocator,
+  locatorDocId,
+  locatorTitle,
+  needsHome,
+  parseLocator,
+  OPENABLE_EXTENSIONS,
+  type Locator,
+} from './doc-locator';
 import {
   clipboardDocId,
   countChars,
@@ -14,6 +24,7 @@ import {
 } from './recent-docs';
 import { loadBody, recordOpen } from './recents-db';
 import { SAMPLE_DOC, SAMPLE_DOC_PATH } from './sample-doc';
+import { isTauri } from './tauri-env';
 
 /**
  * The one way a document reaches the reader. Every entry point — file
@@ -59,29 +70,80 @@ async function open(doc: NewDoc): Promise<void> {
   }).catch((e) => setError(`Opened, but could not add to Recent: ${e}`));
 }
 
-export async function openFilePath(path: string): Promise<void> {
-  const content = await invoke<string>('read_markdown_file', { path });
-  await open({
-    id: fileDocId(path),
-    kind: 'file',
-    title: path.split('/').pop() || path,
-    source: path,
-    content,
-  });
+/**
+ * Fetch a document's text, from this machine or another one.
+ *
+ * A local read answers with the path it actually resolved to, and that is the
+ * locator the document is then known by: `/tmp/a.md` and `/private/tmp/a.md`
+ * name one file, and one file should not become two recents entries — each
+ * with its own annotations — depending on which door it came in by.
+ */
+async function readLocator(locator: Locator): Promise<{ locator: Locator; content: string }> {
+  if (locator.kind !== 'file') {
+    const content = await invoke<string>('read_remote_file', { host: locator.host, path: locator.path });
+    return { locator, content };
+  }
+  const file = await invoke<{ path: string; content: string }>('read_local_file', { path: locator.path });
+  return { locator: { ...locator, path: file.path }, content: file.content };
+}
+
+/**
+ * Open the document a locator names. Reading it can mean a connection to
+ * another machine, which is slow enough to need saying so — the reader keeps
+ * showing whatever it had until the new text actually arrives.
+ */
+export async function openLocator(locator: Locator): Promise<void> {
+  const { setOpening } = useAppStore.getState();
+  const opening = formatLocator(locator);
+  setOpening(opening);
+  try {
+    const found = await readLocator(locator);
+    await open({
+      id: locatorDocId(found.locator),
+      kind: found.locator.kind,
+      title: locatorTitle(found.locator),
+      source: formatLocator(found.locator),
+      content: found.content,
+      format: found.locator.format,
+    });
+  } finally {
+    // Only ours to clear: a second open started meanwhile owns the indicator.
+    if (useAppStore.getState().opening === opening) setOpening(null);
+  }
+}
+
+/**
+ * Open whatever a path box, a link, or the OS handed us. This is where a spec
+ * stops being text and becomes a document; every caller that starts from a
+ * string comes through here so the grammar is applied in exactly one place.
+ */
+export async function openSpec(input: string): Promise<void> {
+  // Where home is has to be asked for, so only ask when there is a ~ to expand.
+  const home = needsHome(input) && isTauri ? await homeDir() : '';
+  const result = parseLocator(input, home);
+  if (!result.ok) throw new Error(result.error);
+  await openLocator(result.locator);
 }
 
 export async function openFileDialog(): Promise<void> {
   const path = await showOpenDialog({
     multiple: false,
-    filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+    filters: [{ name: 'Documents', extensions: [...OPENABLE_EXTENSIONS] }],
   });
-  if (typeof path === 'string') await openFilePath(path);
+  if (typeof path === 'string') await openSpec(path);
 }
 
 export function openClipboardText(text: string): Promise<void> {
   const title = deriveClipboardTitle(text, Date.now());
   // A clipboard document has no path, so its title stands in for one in exports.
-  return open({ id: clipboardDocId(text), kind: 'clipboard', title, source: title, content: text });
+  return open({
+    id: clipboardDocId(text),
+    kind: 'clipboard',
+    title,
+    source: title,
+    content: text,
+    format: 'markdown',
+  });
 }
 
 /** The way in when there is no file to open: dev in a plain browser. */
@@ -92,17 +154,25 @@ export function openSampleDoc(): Promise<void> {
     title: 'sample-document.md',
     source: SAMPLE_DOC_PATH,
     content: SAMPLE_DOC,
+    format: 'markdown',
   });
 }
 
 /**
- * Re-open a recents entry. Files are re-read from disk — so a file edited
- * since it was last opened shows its current contents, and a file that has
+ * Re-open a recents entry. Files are re-read, from disk or over ssh — so one
+ * edited since it was last opened shows its current contents, and one that has
  * moved away fails loudly — while clipboard text comes back from the database.
  */
 export async function openRecent(doc: RecentDoc): Promise<void> {
-  if (doc.kind === 'file') return openFilePath(doc.source);
+  if (doc.kind !== 'clipboard') return openSpec(doc.source);
   const body = await loadBody(doc.id);
   if (body === null) throw new Error(`Clipboard entry "${doc.title}" is no longer stored`);
-  await open({ id: doc.id, kind: doc.kind, title: doc.title, source: doc.source, content: body });
+  await open({
+    id: doc.id,
+    kind: doc.kind,
+    title: doc.title,
+    source: doc.source,
+    content: body,
+    format: 'markdown',
+  });
 }

@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
-import { ClipboardPaste, FileText, Highlighter, X } from 'lucide-react';
+import { ClipboardPaste, FileText, Highlighter, Server, X } from 'lucide-react';
 import { countAnnotations } from '../lib/annotations-db';
 import { openRecent } from '../lib/open-doc';
 import { formatCharCount, formatRelativeTime, type RecentDoc } from '../lib/recent-docs';
 import { clearRecents, deleteRecent, listRecents } from '../lib/recents-db';
 import { useAppStore } from '../store';
 
+const ICONS = { file: FileText, ssh: Server, clipboard: ClipboardPaste };
+
 /**
- * Recently opened documents — files and clipboard entries in one list, newest
- * first. Files are checked lazily: rather than stat-ing every path on load, a
- * file that fails to open is marked unavailable on the spot.
+ * Recently opened documents — local files, files on other machines, and
+ * clipboard entries in one list, newest first. Availability is checked lazily:
+ * rather than stat-ing every path on load, which for a remote one would mean a
+ * connection, an entry that fails to open is marked unavailable on the spot.
  */
 export function RecentList() {
   const setError = useAppStore((s) => s.setError);
@@ -61,10 +64,11 @@ export function RecentList() {
       </div>
       <ul>
         {docs.map((doc) => {
-          const Icon = doc.kind === 'file' ? FileText : ClipboardPaste;
+          const Icon = ICONS[doc.kind] ?? FileText;
           const missing = unavailable.includes(doc.id);
           const count = counts[doc.id] ?? 0;
-          const detail = doc.kind === 'file' ? doc.source : `${formatCharCount(doc.charCount)} chars · ${doc.snippet}`;
+          const detail =
+            doc.kind === 'clipboard' ? `${formatCharCount(doc.charCount)} chars · ${doc.snippet}` : doc.source;
           return (
             <li key={doc.id} className="group relative">
               <button
@@ -86,7 +90,11 @@ export function RecentList() {
                         {count}
                       </span>
                     )}
-                    {missing && <span className="shrink-0 text-[11px] text-red-500">not found</span>}
+                    {missing && (
+                      <span className="shrink-0 text-[11px] text-red-500">
+                        {doc.kind === 'ssh' ? 'unreachable' : 'not found'}
+                      </span>
+                    )}
                   </span>
                   <span className="mt-0.5 block truncate text-[12px] text-neutral-500">{detail}</span>
                 </span>

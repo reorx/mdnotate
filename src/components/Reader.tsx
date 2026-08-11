@@ -11,6 +11,7 @@ import { Toc } from './Toc';
 export function Reader() {
   const content = useAppStore((s) => s.doc?.content ?? null);
   const docId = useAppStore((s) => s.doc?.id ?? null);
+  const format = useAppStore((s) => s.doc?.format ?? 'markdown');
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const annotations = useAppStore((s) => s.annotations);
 
@@ -101,9 +102,18 @@ export function Reader() {
       )}
       <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto">
         <div ref={annotator.containerRef} className="relative mx-auto max-w-[46rem] px-8 py-6">
-          <article className="prose-dense">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content ?? ''}</ReactMarkdown>
-          </article>
+          {/* Plain text is shown as it was written — running it through the
+              Markdown renderer would turn a leading # into a heading and
+              collapse the line breaks a log or a config depends on. Either way
+              the annotator sees ordinary rendered text, so highlighting works
+              the same in both. */}
+          {format === 'markdown' ? (
+            <article className="prose-dense">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content ?? ''}</ReactMarkdown>
+            </article>
+          ) : (
+            <article className="prose-plain">{content ?? ''}</article>
+          )}
           {popup && (
             <AnnotationPopup
               key={popup.kind === 'draft' ? popup.draftId : popup.annotationId}

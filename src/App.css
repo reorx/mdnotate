@@ -146,3 +146,21 @@
 .prose-dense ::selection {
   background: rgba(245, 158, 11, 0.25);
 }
+
+/* Plain text: shown as written, wrapped so long lines stay readable without a
+   horizontal scrollbar. Monospace because the formats that land here — logs,
+   config, CSV — are the ones whose columns line up. */
+.prose-plain {
+  display: block;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #1a1a1a;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  tab-size: 4;
+}
+
+.prose-plain ::selection {
+  background: rgba(245, 158, 11, 0.25);
+}
