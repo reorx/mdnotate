@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAppStore } from '../store';
+import { createAnnotation, deleteAnnotation, updateComment } from '../lib/annotate';
 import { buildToc, type TocItem } from '../lib/toc';
 import { useTextAnnotator } from '../lib/use-text-annotator';
 import { AnnotationPopup } from './AnnotationPopup';
@@ -12,9 +13,6 @@ export function Reader() {
   const docId = useAppStore((s) => s.doc?.id ?? null);
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const annotations = useAppStore((s) => s.annotations);
-  const addAnnotation = useAppStore((s) => s.addAnnotation);
-  const removeAnnotationById = useAppStore((s) => s.removeAnnotationById);
-  const setComment = useAppStore((s) => s.setComment);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [toc, setToc] = useState<TocItem[]>([]);
@@ -24,9 +22,9 @@ export function Reader() {
     enabled: !!content,
     documentKey: docId,
     annotations,
-    onCreate: addAnnotation,
-    onRemove: removeAnnotationById,
-    onSetComment: setComment,
+    onCreate: createAnnotation,
+    onRemove: deleteAnnotation,
+    onSetComment: updateComment,
   });
 
   // Collect headings from the rendered DOM: assign slug ids and build the TOC.

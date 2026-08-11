@@ -17,6 +17,15 @@ export interface Annotation {
   updatedAt: number;
 }
 
+/**
+ * An annotation as it comes back from storage, tagged with the document content
+ * it was anchored to.
+ */
+export interface StoredAnnotation extends Annotation {
+  /** Hash of the document text the offsets were measured against. */
+  docHash: string;
+}
+
 const COMMENT_PURPOSE = 'commenting';
 
 export function toRecogitoAnnotation(annotation: Annotation): TextAnnotation {
@@ -57,6 +66,32 @@ export function fromRecogitoAnnotation(annotation: TextAnnotation, now: number):
 
 export function sortAnnotations(annotations: Annotation[]): Annotation[] {
   return [...annotations].sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+/**
+ * Sort stored annotations into the ones that still belong to this document and
+ * the ones that no longer do.
+ *
+ * Offsets are measured over the rendered text, so an annotation made on
+ * different content would point at whatever words now happen to sit at those
+ * positions. Rather than highlight the wrong sentence, annotations whose hash
+ * does not match are given up on.
+ */
+export function splitStaleAnnotations(
+  rows: StoredAnnotation[],
+  docHash: string,
+): { fresh: Annotation[]; stale: StoredAnnotation[] } {
+  const fresh: Annotation[] = [];
+  const stale: StoredAnnotation[] = [];
+  for (const row of rows) {
+    if (row.docHash === docHash) {
+      const { docHash: _hash, ...annotation } = row;
+      fresh.push(annotation);
+    } else {
+      stale.push(row);
+    }
+  }
+  return { fresh: sortAnnotations(fresh), stale };
 }
 
 export function upsertAnnotation(annotations: Annotation[], annotation: Annotation): Annotation[] {

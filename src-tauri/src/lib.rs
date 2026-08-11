@@ -14,10 +14,15 @@ use default_app::DefaultAppStatus;
 const DB_URL: &str = "sqlite:mdnotate.db";
 
 fn migrations() -> Vec<Migration> {
-    vec![Migration {
-        version: 1,
-        description: "create_recent_docs",
-        sql: "CREATE TABLE recent_docs (
+    vec![
+        // sqlx checksums each migration's SQL and refuses to open a database
+        // whose applied migrations no longer match. The text below is therefore
+        // frozen, indentation included — reformat it and every existing install
+        // fails to open its database.
+        Migration {
+            version: 1,
+            description: "create_recent_docs",
+            sql: "CREATE TABLE recent_docs (
                   id         TEXT PRIMARY KEY,
                   kind       TEXT NOT NULL,
                   title      TEXT NOT NULL,
@@ -28,8 +33,33 @@ fn migrations() -> Vec<Migration> {
                   opened_at  INTEGER NOT NULL
               );
               CREATE INDEX idx_recent_docs_opened_at ON recent_docs (opened_at DESC);",
-        kind: MigrationKind::Up,
-    }]
+            kind: MigrationKind::Up,
+        },
+        // Highlights and comments, restored when the document is opened again.
+        // `doc_hash` is the hash of the content the offsets were measured
+        // against: annotations carrying any other hash were made on text that
+        // has since changed, and are dropped rather than misplaced.
+        // A document leaving the recents list takes its annotations with it —
+        // sqlx enables `PRAGMA foreign_keys`, so the cascade really fires.
+        // `start`/`end` are avoided as column names: END is an SQL keyword.
+        Migration {
+            version: 2,
+            description: "create_annotations",
+            sql: "CREATE TABLE annotations (
+                      id           TEXT PRIMARY KEY,
+                      doc_id       TEXT NOT NULL REFERENCES recent_docs(id) ON DELETE CASCADE,
+                      doc_hash     TEXT NOT NULL,
+                      quote        TEXT NOT NULL,
+                      start_offset INTEGER NOT NULL,
+                      end_offset   INTEGER NOT NULL,
+                      comment      TEXT,
+                      created_at   INTEGER NOT NULL,
+                      updated_at   INTEGER NOT NULL
+                  );
+                  CREATE INDEX idx_annotations_doc_id ON annotations (doc_id);",
+            kind: MigrationKind::Up,
+        },
+    ]
 }
 
 /// File path waiting to be picked up by the frontend once it has mounted.

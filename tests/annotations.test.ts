@@ -4,8 +4,10 @@ import {
   removeAnnotation,
   setAnnotationComment,
   sortAnnotations,
+  splitStaleAnnotations,
   upsertAnnotation,
   type Annotation,
+  type StoredAnnotation,
 } from '../src/lib/annotations';
 
 function make(partial: Partial<Annotation> & Pick<Annotation, 'id' | 'start'>): Annotation {
@@ -17,6 +19,12 @@ function make(partial: Partial<Annotation> & Pick<Annotation, 'id' | 'start'>): 
     updatedAt: 1000,
     ...partial,
   };
+}
+
+function stored(
+  partial: Partial<StoredAnnotation> & Pick<StoredAnnotation, 'id' | 'start' | 'docHash'>,
+): StoredAnnotation {
+  return { ...make(partial), docHash: partial.docHash };
 }
 
 describe('annotation list operations', () => {
@@ -55,6 +63,44 @@ describe('annotation list operations', () => {
   it('setAnnotationComment with null turns an annotation back into a plain highlight', () => {
     const list = [make({ id: 'a', start: 10, comment: 'x' })];
     expect(setAnnotationComment(list, 'a', null, 2000)[0].comment).toBeNull();
+  });
+});
+
+describe('splitStaleAnnotations', () => {
+  it('restores annotations made on the same content, in document order', () => {
+    const rows = [stored({ id: 'b', start: 50, docHash: 'h1' }), stored({ id: 'a', start: 10, docHash: 'h1' })];
+    const { fresh, stale } = splitStaleAnnotations(rows, 'h1');
+    expect(fresh.map((a) => a.id)).toEqual(['a', 'b']);
+    expect(stale).toEqual([]);
+  });
+
+  it('drops annotations anchored to an earlier version of the document', () => {
+    const rows = [stored({ id: 'old', start: 10, docHash: 'h1' }), stored({ id: 'new', start: 50, docHash: 'h2' })];
+    const { fresh, stale } = splitStaleAnnotations(rows, 'h2');
+    expect(fresh.map((a) => a.id)).toEqual(['new']);
+    expect(stale.map((a) => a.id)).toEqual(['old']);
+  });
+
+  it('drops every annotation when the document has changed entirely', () => {
+    const rows = [stored({ id: 'a', start: 10, docHash: 'h1' }), stored({ id: 'b', start: 50, docHash: 'h1' })];
+    const { fresh, stale } = splitStaleAnnotations(rows, 'h2');
+    expect(fresh).toEqual([]);
+    expect(stale).toHaveLength(2);
+  });
+
+  it('strips the stored hash, so what reaches the reader is a plain annotation', () => {
+    const { fresh } = splitStaleAnnotations([stored({ id: 'a', start: 10, docHash: 'h1' })], 'h1');
+    expect(fresh[0]).not.toHaveProperty('docHash');
+    expect(fresh[0]).toEqual(make({ id: 'a', start: 10 }));
+  });
+
+  it('carries comments through unchanged', () => {
+    const rows = [stored({ id: 'a', start: 10, docHash: 'h1', comment: 'my thought' })];
+    expect(splitStaleAnnotations(rows, 'h1').fresh[0].comment).toBe('my thought');
+  });
+
+  it('returns nothing for a document that has never been annotated', () => {
+    expect(splitStaleAnnotations([], 'h1')).toEqual({ fresh: [], stale: [] });
   });
 });
 

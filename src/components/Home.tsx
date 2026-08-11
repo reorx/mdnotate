@@ -1,7 +1,5 @@
-import { fileDocId } from '../lib/recent-docs';
-import { SAMPLE_DOC, SAMPLE_DOC_PATH } from '../lib/sample-doc';
+import { openSampleDoc } from '../lib/open-doc';
 import { isTauri } from '../lib/tauri-env';
-import { useAppStore } from '../store';
 import { ClipboardCard } from './ClipboardCard';
 import { DefaultAppCard } from './DefaultAppCard';
 import { OpenFileCard } from './OpenFileCard';
@@ -21,18 +19,7 @@ export function Home() {
         <DefaultAppCard />
 
         {import.meta.env.DEV && !isTauri && (
-          <button
-            className="self-start px-2 text-[12px] text-neutral-400 underline"
-            onClick={() =>
-              useAppStore.getState().openDoc({
-                id: fileDocId(SAMPLE_DOC_PATH),
-                kind: 'file',
-                title: 'sample-document.md',
-                source: SAMPLE_DOC_PATH,
-                content: SAMPLE_DOC,
-              })
-            }
-          >
+          <button className="self-start px-2 text-[12px] text-neutral-400 underline" onClick={() => openSampleDoc()}>
             Open the sample document
           </button>
         )}

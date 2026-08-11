@@ -18,7 +18,12 @@ export interface OpenDoc {
   /** What `{{filePath}}` renders to: the full path for files, the title for clipboard entries. */
   source: string;
   content: string;
+  /** Hash of `content`. Annotations stored under any other hash were made on text that has since changed. */
+  contentHash: string;
 }
+
+/** A document as the entry points build it, before `open-doc` stamps its hash. */
+export type NewDoc = Omit<OpenDoc, 'contentHash'>;
 
 /** A row of the recents list. The clipboard body is fetched separately, on open. */
 export interface RecentDoc {

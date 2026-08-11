@@ -1,9 +1,7 @@
-import Database from '@tauri-apps/plugin-sql';
+import { forgetDocAnnotations } from './annotations-db';
+import { db } from './db';
 import { isTauri } from './tauri-env';
 import { RECENTS_LIMIT, upsertRecent, type RecentDoc } from './recent-docs';
-
-/** Schema lives in the Rust migrations registered for this same URL. */
-const DB_URL = 'sqlite:mdnotate.db';
 
 /** A recents row plus the clipboard body, which the list view never loads. */
 export interface RecentEntry extends RecentDoc {
@@ -35,13 +33,6 @@ function toRecentDoc(row: Row): RecentDoc {
   };
 }
 
-let connection: Promise<Database> | null = null;
-
-function db(): Promise<Database> {
-  connection ??= Database.load(DB_URL);
-  return connection;
-}
-
 export async function listRecents(): Promise<RecentDoc[]> {
   if (!isTauri) return fallback.list();
   const rows = await (await db()).select<Row[]>(`SELECT ${COLUMNS} FROM recent_docs ORDER BY opened_at DESC`);
@@ -68,6 +59,8 @@ export async function recordOpen(entry: RecentEntry): Promise<void> {
        opened_at = excluded.opened_at`,
     [entry.id, entry.kind, entry.title, entry.source, entry.body, entry.snippet, entry.charCount, entry.openedAt],
   );
+  // Falling off the end of the list takes the document's annotations with it,
+  // through the foreign key on `annotations.doc_id`.
   await conn.execute(
     'DELETE FROM recent_docs WHERE id NOT IN (SELECT id FROM recent_docs ORDER BY opened_at DESC LIMIT $1)',
     [RECENTS_LIMIT],
@@ -81,6 +74,7 @@ export async function loadBody(id: string): Promise<string | null> {
   return rows[0]?.body ?? null;
 }
 
+/** Forgetting an entry forgets its annotations too — the foreign key cascades. */
 export async function deleteRecent(id: string): Promise<void> {
   if (!isTauri) return fallback.remove(id);
   await (await db()).execute('DELETE FROM recent_docs WHERE id = $1', [id]);
@@ -114,10 +108,13 @@ const fallback = {
   async body(id: string): Promise<string | null> {
     return fallback.read().find((e) => e.id === id)?.body ?? null;
   },
+  // No foreign key here, so the cascade has to be spelled out.
   async remove(id: string) {
     fallback.write(fallback.read().filter((e) => e.id !== id));
+    await forgetDocAnnotations(id);
   },
   async clear() {
     fallback.write([]);
+    await forgetDocAnnotations(null);
   },
 };

@@ -13,7 +13,7 @@ interface AppState {
   template: string;
   /** Message for the banner under the toolbar; null when there is nothing wrong. */
   error: string | null;
-  openDoc: (doc: OpenDoc) => void;
+  openDoc: (doc: OpenDoc, annotations?: Annotation[]) => void;
   setError: (error: string | null) => void;
   setView: (view: View) => void;
   toggleSidebar: () => void;
@@ -30,8 +30,10 @@ export const useAppStore = create<AppState>((set) => ({
   annotations: [],
   template: DEFAULT_TEMPLATE,
   error: null,
-  // A successful open clears whatever went wrong last time.
-  openDoc: (doc) => set({ doc, annotations: [], view: 'reader', error: null }),
+  // A successful open clears whatever went wrong last time. Annotations arrive
+  // with the document, not after it: the annotator seeds itself once, from what
+  // the store holds the moment the reader mounts.
+  openDoc: (doc, annotations = []) => set({ doc, annotations, view: 'reader', error: null }),
   setError: (error) => set({ error }),
   setView: (view) => set({ view }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
