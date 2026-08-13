@@ -99,6 +99,8 @@ pnpm build:signed  # scripts/build-signed.sh：构建 + Developer ID 签名 + �
 
 push `v*` tag 触发 `.github/workflows/release.yml`：macOS runner 构建 universal dmg，Developer ID 签名 + 公证 + staple（Tauri CLI 根据 `APPLE_CERTIFICATE` / `APPLE_API_KEY` 等环境变量自动完成），发布到本仓库 GitHub Release。tag 必须与 `tauri.conf.json` 的 `version` 一致（workflow 会校验）。workflow_dispatch 手动触发只出 artifact 不发 release。签名凭据 secrets 命名与 vocalflow-mac 一致，源文件在 `~/Sync/apple-developer/`；签名背景知识见 `../vocalflow-mac/kb/notes/2026-08-10-macos-developer-id-signing-guide.md`。
 
+**完整流程走 `.claude/skills/release/`**（含定版本号的判断、失败后怎么收拾）。两个配套脚本：`scripts/release-status.sh` 一屏核对版本文件 / tag / release / workflow 结论——**tag 推了但 workflow 挂了会留下一个有 tag 没 release 的版本号，只看 `gh release list` 会以为它还空着**；`scripts/bump-version.sh <版本号>` 把四处版本号（`package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock`）一次改齐并自校验，不要手工 sed。
+
 **Homebrew cask**：`brew install --cask reorx/tap/mdnotate`，cask 定义在 `reorx/homebrew-tap` 仓库（本地 `~/Code/homebrew-tap`）的 `Casks/mdnotate.rb`。发版时 workflow 的「Bump Homebrew cask」步骤用 sed 改写 version / sha256 后推送 tap 仓库；依赖 `TAP_PUSH_TOKEN` secret（对 homebrew-tap 有 contents:write 的 fine-grained PAT），未配置只是跳过，需手动 bump。cask 的 zap 列表引用 identifier `top.ideachat.mdnotate`，identifier 变了要同步。
 
 ## 测试提示
