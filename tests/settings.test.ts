@@ -23,11 +23,19 @@ describe('mergeSettings', () => {
     expect(mergeSettings({ theme: 'dark' }).theme).toBe('dark');
   });
 
+  it('keeps stored panel widths, clamped to their range', () => {
+    expect(mergeSettings({ panels: { toc: 200, annotations: 9999 } }).panels).toEqual({
+      toc: 200,
+      annotations: 480,
+    });
+  });
+
   // A hand-edited settings.json must never be able to keep the reader shut.
   it('falls back for values of the wrong type instead of throwing', () => {
-    const merged = mergeSettings({ template: 42, typography: 'large', theme: 'sepia' });
+    const merged = mergeSettings({ template: 42, typography: 'large', theme: 'sepia', panels: 'wide' });
     expect(merged.template).toBe(DEFAULT_TEMPLATE);
     expect(merged.typography).toEqual(DEFAULT_SETTINGS.typography);
     expect(merged.theme).toBe(DEFAULT_SETTINGS.theme);
+    expect(merged.panels).toEqual(DEFAULT_SETTINGS.panels);
   });
 });

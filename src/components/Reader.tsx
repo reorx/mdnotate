@@ -1,14 +1,70 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAppStore } from '../store';
 import { createAnnotation, deleteAnnotation, updateComment } from '../lib/annotate';
+import { DEFAULT_PANEL_WIDTHS, panelWidthFromPointer, type PanelSide } from '../lib/panels';
+import { saveSettings } from '../lib/settings';
 import { buildToc, type TocItem } from '../lib/toc';
 import { typographyVars } from '../lib/typography';
 import { useTextAnnotator } from '../lib/use-text-annotator';
 import { AnnotationList } from './AnnotationList';
 import { AnnotationPopup } from './AnnotationPopup';
 import { Toc } from './Toc';
+
+/**
+ * The hairline between a panel and the document, and the drag that resizes the
+ * panel. The line is the old border; the hit zone around it is wider than what
+ * it paints, or nobody would ever catch it. Widths go through the store first
+ * and the settings file on release — same order as every other write.
+ */
+function PanelResizeHandle({
+  side,
+  containerRef,
+}: {
+  side: PanelSide;
+  containerRef: RefObject<HTMLDivElement | null>;
+}) {
+  const [dragging, setDragging] = useState(false);
+
+  const resizeTo = (clientX: number) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const { settings, updateSettings } = useAppStore.getState();
+    updateSettings({ panels: { ...settings.panels, [side]: panelWidthFromPointer(side, clientX, rect) } });
+  };
+
+  const setWidth = (width: number) => {
+    const { settings, updateSettings } = useAppStore.getState();
+    const panels = { ...settings.panels, [side]: width };
+    updateSettings({ panels });
+    saveSettings({ panels }).catch(() => {});
+  };
+
+  const endDrag = () => {
+    if (!dragging) return;
+    setDragging(false);
+    saveSettings({ panels: useAppStore.getState().settings.panels }).catch(() => {});
+  };
+
+  return (
+    <div className={`relative w-px shrink-0 ${dragging ? 'bg-amber-400' : 'bg-neutral-200'}`}>
+      <div
+        className="absolute inset-y-0 -left-[3px] z-10 w-[7px] cursor-col-resize touch-none hover:bg-amber-400/25"
+        title="Drag to resize; double-click to reset"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setDragging(true);
+        }}
+        onPointerMove={(e) => dragging && resizeTo(e.clientX)}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onDoubleClick={() => setWidth(DEFAULT_PANEL_WIDTHS[side])}
+      />
+    </div>
+  );
+}
 
 export function Reader() {
   const content = useAppStore((s) => s.doc?.content ?? null);
@@ -18,8 +74,10 @@ export function Reader() {
   const annotationsOpen = useAppStore((s) => s.annotationsOpen);
   const annotations = useAppStore((s) => s.annotations);
   const typography = useAppStore((s) => s.settings.typography[format]);
+  const panels = useAppStore((s) => s.settings.panels);
   const theme = useAppStore((s) => s.resolvedTheme);
 
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [toc, setToc] = useState<TocItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -111,15 +169,21 @@ export function Reader() {
   return (
     // A stacking context of its own, so the annotation popup (z-20) stays
     // under the views that cover the reader rather than floating over them.
-    <div className="relative z-0 flex min-h-0 flex-1">
+    // `min-w-0`, or this row's min-content — both panels plus the longest
+    // unbreakable line of prose — becomes the window's minimum width and the
+    // whole app scrolls sideways.
+    <div ref={rootRef} className="relative z-0 flex min-h-0 min-w-0 flex-1">
       {sidebarOpen && (
-        <aside className="w-60 shrink-0 overflow-y-auto border-r border-neutral-200 bg-neutral-50">
-          <Toc items={toc} activeId={activeId} onJump={jumpTo} />
-        </aside>
+        <>
+          <aside className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50" style={{ width: panels.toc }}>
+            <Toc items={toc} activeId={activeId} onJump={jumpTo} />
+          </aside>
+          <PanelResizeHandle side="toc" containerRef={rootRef} />
+        </>
       )}
       <div
         ref={scrollRef}
-        className="min-w-0 flex-1 overflow-y-auto"
+        className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
         style={typographyVars(typography) as CSSProperties}
       >
         <div ref={annotator.containerRef} className="prose-column relative mx-auto px-8 py-6">
@@ -130,7 +194,21 @@ export function Reader() {
               the same in both. */}
           {format === 'markdown' ? (
             <article className="prose-dense">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content ?? ''}</ReactMarkdown>
+              {/* A table cannot wrap below its min-content width, and the
+                  scroller no longer scrolls sideways for it — so a wide table
+                  scrolls inside its own box, like `pre` always has. */}
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  table: ({ node: _node, ...props }) => (
+                    <div className="overflow-x-auto">
+                      <table {...props} />
+                    </div>
+                  ),
+                }}
+              >
+                {content ?? ''}
+              </ReactMarkdown>
             </article>
           ) : (
             <article className="prose-plain">{content ?? ''}</article>
@@ -150,9 +228,12 @@ export function Reader() {
         </div>
       </div>
       {annotationsOpen && (
-        <aside className="w-72 shrink-0 overflow-y-auto border-l border-neutral-200 bg-neutral-50">
-          <AnnotationList annotations={annotations} activeId={activeAnnotationId} onJump={jumpToAnnotation} />
-        </aside>
+        <>
+          <PanelResizeHandle side="annotations" containerRef={rootRef} />
+          <aside className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50" style={{ width: panels.annotations }}>
+            <AnnotationList annotations={annotations} activeId={activeAnnotationId} onJump={jumpToAnnotation} />
+          </aside>
+        </>
       )}
     </div>
   );
