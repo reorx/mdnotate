@@ -4,6 +4,14 @@
 
 Register it as the default opener for `.md` / `.markdown` files, read in a dense, reader-friendly layout, select text to highlight or comment, then export all annotations as Markdown blockquotes (each followed by its comment) and copy them anywhere.
 
+## Install
+
+```bash
+brew install --cask reorx/tap/mdnotate
+```
+
+Or grab the signed & notarized dmg from [Releases](https://github.com/reorx/mdnotate/releases).
+
 ## Features
 
 - **Default Markdown opener**: file associations for `md` / `markdown` (Finder double-click, `open -a mdnotate file.md`, drag-and-drop, CLI argument; single-instance). The start screen shows whether mdnotate currently holds the association and offers a one-click **Set as Default** (macOS asks you to confirm)

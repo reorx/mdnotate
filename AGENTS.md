@@ -79,6 +79,8 @@ pnpm tauri build   # 产出 .app 与 .dmg
 
 push `v*` tag 触发 `.github/workflows/release.yml`：macOS runner 构建 universal dmg，Developer ID 签名 + 公证 + staple（Tauri CLI 根据 `APPLE_CERTIFICATE` / `APPLE_API_KEY` 等环境变量自动完成），发布到本仓库 GitHub Release。tag 必须与 `tauri.conf.json` 的 `version` 一致（workflow 会校验）。workflow_dispatch 手动触发只出 artifact 不发 release。签名凭据 secrets 命名与 vocalflow-mac 一致，源文件在 `~/Sync/apple-developer/`；签名背景知识见 `../vocalflow-mac/kb/notes/2026-08-10-macos-developer-id-signing-guide.md`。
 
+**Homebrew cask**：`brew install --cask reorx/tap/mdnotate`，cask 定义在 `reorx/homebrew-tap` 仓库（本地 `~/Code/homebrew-tap`）的 `Casks/mdnotate.rb`。发版时 workflow 的「Bump Homebrew cask」步骤用 sed 改写 version / sha256 后推送 tap 仓库；依赖 `TAP_PUSH_TOKEN` secret（对 homebrew-tap 有 contents:write 的 fine-grained PAT），未配置只是跳过，需手动 bump。cask 的 zap 列表引用 identifier `top.ideachat.mdnotate`，identifier 变了要同步。
+
 ## 测试提示
 
 agent-browser 用合成 PointerEvent 无法触发 recogito 选区；必须用真实 CDP 鼠标序列：`mouse move` → `mouse down` → 中间点 `mouse move` → 终点 `mouse move` → `mouse up`。

@@ -93,3 +93,32 @@ jobs:
           gh release create "$GITHUB_REF_NAME" "${DMG[@]}" \
             --title "mdnotate $GITHUB_REF_NAME" --generate-notes \
             || gh release upload "$GITHUB_REF_NAME" "${DMG[@]}" --clobber
+
+      # 发版后自动更新 reorx/homebrew-tap 的 cask（version + sha256）。
+      # 需要 TAP_PUSH_TOKEN secret：对 homebrew-tap 仓库有 contents:write 的
+      # fine-grained PAT（GITHUB_TOKEN 只覆盖本仓库，推不了别的仓库）。未配置则跳过。
+      - name: Bump Homebrew cask
+        if: github.ref_type == 'tag'
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+        run: |
+          if [[ -z "$TAP_TOKEN" ]]; then
+            echo "TAP_PUSH_TOKEN 未配置，跳过 cask 更新（需手动 bump reorx/homebrew-tap）"
+            exit 0
+          fi
+          VERSION=${GITHUB_REF_NAME#v}
+          DMG=(src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          SHA=$(shasum -a 256 "${DMG[0]}" | cut -d' ' -f1)
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/reorx/homebrew-tap.git" /tmp/tap
+          cd /tmp/tap
+          sed -i '' \
+            -e "s|^  version \".*\"|  version \"$VERSION\"|" \
+            -e "s|^  sha256 \".*\"|  sha256 \"$SHA\"|" \
+            Casks/mdnotate.rb
+          if git diff --quiet Casks/mdnotate.rb; then
+            echo "cask 已是 $VERSION，无需更新"
+            exit 0
+          fi
+          git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
+            commit -am "mdnotate $VERSION"
+          git push
