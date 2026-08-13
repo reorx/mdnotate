@@ -2418,6 +2418,7 @@ name = "mdnotate"
 version = "0.3.0"
 dependencies = [
  "core-foundation",
+ "objc2",
  "serde",
  "serde_json",
  "tauri",

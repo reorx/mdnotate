@@ -255,6 +255,60 @@ fn set_markdown_default_app(app: AppHandle) {
     default_app::request_default(&app.config().identifier);
 }
 
+// Window dragging for the toolbar. tauri's stock `start_dragging` reaches
+// tao's drag_window through an async command plus an event-loop user message,
+// by which point NSApp.currentEvent is a LeftMouseDragged — and macOS 26
+// (Tahoe) makes performWindowDragWithEvent: a silent no-op for anything but a
+// live LeftMouseDown (earlier releases tolerated the stale event, which is why
+// drag regions used to work). This command must stay synchronous: sync
+// commands run on the main thread while the mousedown is still being
+// dispatched, so a LeftMouseDown synthesized here at the live cursor position
+// is accepted. The frontend hook lives in `src/lib/window-drag.ts`.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn start_window_drag(window: tauri::Window) -> Result<(), String> {
+    use objc2::encode::{Encode, Encoding};
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGPoint {
+        x: f64,
+        y: f64,
+    }
+    unsafe impl Encode for CGPoint {
+        const ENCODING: Encoding = Encoding::Struct("CGPoint", &[f64::ENCODING, f64::ENCODING]);
+    }
+
+    let ns_win = window.ns_window().map_err(|e| e.to_string())? as *mut AnyObject;
+    unsafe {
+        let screen_loc: CGPoint = msg_send![class!(NSEvent), mouseLocation];
+        let local_loc: CGPoint = msg_send![ns_win, convertPointFromScreen: screen_loc];
+        let win_number: isize = msg_send![ns_win, windowNumber];
+        let proc_info: *mut AnyObject = msg_send![class!(NSProcessInfo), processInfo];
+        let uptime: f64 = msg_send![proc_info, systemUptime];
+
+        let event: *mut AnyObject = msg_send![
+            class!(NSEvent),
+            mouseEventWithType: 1usize, // NSEventTypeLeftMouseDown
+            location: local_loc,
+            modifierFlags: 0usize,
+            timestamp: uptime,
+            windowNumber: win_number,
+            context: std::ptr::null_mut::<AnyObject>(),
+            eventNumber: 0isize,
+            clickCount: 1isize,
+            pressure: 1.0f32,
+        ];
+        if event.is_null() {
+            return Err("failed to synthesize drag event".into());
+        }
+        let _: () = msg_send![ns_win, performWindowDragWithEvent: event];
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -282,7 +336,8 @@ pub fn run() {
             read_remote_file,
             take_pending_doc,
             markdown_default_app_status,
-            set_markdown_default_app
+            set_markdown_default_app,
+            start_window_drag
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
