@@ -22,14 +22,27 @@ import {
   type NewDoc,
   type RecentDoc,
 } from './recent-docs';
+import { createLatest } from './latest';
 import { loadBody, recordOpen } from './recents-db';
 import { SAMPLE_DOC, SAMPLE_DOC_PATH } from './sample-doc';
 import { isTauri } from './tauri-env';
+import { announceDoc } from './window-doc';
+
+/**
+ * Every open this window has been asked for, so that a slow one cannot land on
+ * top of a quicker one asked for after it. Per module, which is per window:
+ * each window has its own reader and its own idea of what it is showing.
+ */
+const opens = createLatest();
 
 /**
  * The one way a document reaches the reader. Every entry point — file
  * association, dialog, drag-drop, clipboard, recents — funnels through here so
  * that opening and being remembered are never out of step.
+ *
+ * `attempt` is the ticket its caller took before it started fetching anything;
+ * a document superseded while it was on its way is dropped here rather than
+ * shown, since by then the user has asked for something else.
  *
  * Annotations are read before the document reaches the store, since they have
  * to be there when the reader mounts; everything else about the document is
@@ -40,7 +53,7 @@ import { isTauri } from './tauri-env';
  * must not come back as a rejection: callers read a rejection as "this document
  * would not open", and would wrongly blame the document for a database problem.
  */
-async function open(doc: NewDoc): Promise<void> {
+async function open(doc: NewDoc, attempt: number): Promise<void> {
   const { openDoc, setError } = useAppStore.getState();
   const contentHash = hashText(doc.content);
 
@@ -55,7 +68,9 @@ async function open(doc: NewDoc): Promise<void> {
     note = `${restored.discarded} annotations discarded: this document has changed since they were made`;
   }
 
+  if (!opens.isCurrent(attempt)) return;
   openDoc({ ...doc, contentHash }, restored.annotations);
+  announceDoc();
   if (note) setError(note);
 
   recordOpen({
@@ -95,17 +110,29 @@ async function readLocator(locator: Locator): Promise<{ locator: Locator; conten
 export async function openLocator(locator: Locator): Promise<void> {
   const { setOpening } = useAppStore.getState();
   const opening = formatLocator(locator);
+  const attempt = opens.start();
   setOpening(opening);
   try {
     const found = await readLocator(locator);
-    await open({
-      id: locatorDocId(found.locator),
-      kind: found.locator.kind,
-      title: locatorTitle(found.locator),
-      source: formatLocator(found.locator),
-      content: found.content,
-      format: found.locator.format,
-    });
+    await open(
+      {
+        id: locatorDocId(found.locator),
+        kind: found.locator.kind,
+        title: locatorTitle(found.locator),
+        source: formatLocator(found.locator),
+        content: found.content,
+        format: found.locator.format,
+      },
+      attempt,
+    );
+  } catch (e) {
+    // A window is claimed for the document the moment one is routed to it, so
+    // one that could not be read has to be owned up to: otherwise the window
+    // goes on standing in for a document it never managed to show, and opening
+    // that document again would only raise it. Success needs nothing here —
+    // `open` has already said what the window holds.
+    announceDoc();
+    throw e;
   } finally {
     // Only ours to clear: a second open started meanwhile owns the indicator.
     if (useAppStore.getState().opening === opening) setOpening(null);
@@ -136,26 +163,32 @@ export async function openFileDialog(): Promise<void> {
 export function openClipboardText(text: string): Promise<void> {
   const title = deriveClipboardTitle(text, Date.now());
   // A clipboard document has no path, so its title stands in for one in exports.
-  return open({
-    id: clipboardDocId(text),
-    kind: 'clipboard',
-    title,
-    source: title,
-    content: text,
-    format: 'markdown',
-  });
+  return open(
+    {
+      id: clipboardDocId(text),
+      kind: 'clipboard',
+      title,
+      source: title,
+      content: text,
+      format: 'markdown',
+    },
+    opens.start(),
+  );
 }
 
 /** The way in when there is no file to open: dev in a plain browser. */
 export function openSampleDoc(): Promise<void> {
-  return open({
-    id: fileDocId(SAMPLE_DOC_PATH),
-    kind: 'file',
-    title: 'sample-document.md',
-    source: SAMPLE_DOC_PATH,
-    content: SAMPLE_DOC,
-    format: 'markdown',
-  });
+  return open(
+    {
+      id: fileDocId(SAMPLE_DOC_PATH),
+      kind: 'file',
+      title: 'sample-document.md',
+      source: SAMPLE_DOC_PATH,
+      content: SAMPLE_DOC,
+      format: 'markdown',
+    },
+    opens.start(),
+  );
 }
 
 /**
@@ -165,14 +198,18 @@ export function openSampleDoc(): Promise<void> {
  */
 export async function openRecent(doc: RecentDoc): Promise<void> {
   if (doc.kind !== 'clipboard') return openSpec(doc.source);
+  const attempt = opens.start();
   const body = await loadBody(doc.id);
   if (body === null) throw new Error(`Clipboard entry "${doc.title}" is no longer stored`);
-  await open({
-    id: doc.id,
-    kind: doc.kind,
-    title: doc.title,
-    source: doc.source,
-    content: body,
-    format: 'markdown',
-  });
+  await open(
+    {
+      id: doc.id,
+      kind: doc.kind,
+      title: doc.title,
+      source: doc.source,
+      content: body,
+      format: 'markdown',
+    },
+    attempt,
+  );
 }

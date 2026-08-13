@@ -1,11 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
-  "windows": ["main"],
+  "description": "Capability for every document window",
+  "windows": ["main", "doc-*"],
   "permissions": [
     "core:default",
     "core:window:allow-set-theme",
+    "core:window:allow-set-title",
     "opener:default",
     "dialog:default",
     "store:default",
