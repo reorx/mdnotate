@@ -1,6 +1,6 @@
 [package]
 name = "mdnotate"
-version = "0.3.0"
+version = "0.4.1"
 description = "Markdown Annotate - read and annotate local Markdown files"
 authors = ["reorx"]
 edition = "2021"

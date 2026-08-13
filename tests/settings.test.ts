@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, mergeSettings } from '../src/lib/settings';
-import { DEFAULT_TEMPLATE } from '../src/lib/template';
+import { DEFAULT_ANNOTATION_TEMPLATE, DEFAULT_TEMPLATE } from '../src/lib/template';
 
 describe('mergeSettings', () => {
   it('returns the defaults for an empty store', () => {
@@ -19,6 +19,12 @@ describe('mergeSettings', () => {
     expect(merged.typography.text).toEqual(DEFAULT_SETTINGS.typography.text);
   });
 
+  it('keeps a stored annotation template', () => {
+    const merged = mergeSettings({ annotationTemplate: '- {{highlight}}' });
+    expect(merged.annotationTemplate).toBe('- {{highlight}}');
+    expect(merged.template).toBe(DEFAULT_TEMPLATE);
+  });
+
   it('keeps a stored theme preference', () => {
     expect(mergeSettings({ theme: 'dark' }).theme).toBe('dark');
   });
@@ -32,8 +38,15 @@ describe('mergeSettings', () => {
 
   // A hand-edited settings.json must never be able to keep the reader shut.
   it('falls back for values of the wrong type instead of throwing', () => {
-    const merged = mergeSettings({ template: 42, typography: 'large', theme: 'sepia', panels: 'wide' });
+    const merged = mergeSettings({
+      template: 42,
+      annotationTemplate: [],
+      typography: 'large',
+      theme: 'sepia',
+      panels: 'wide',
+    });
     expect(merged.template).toBe(DEFAULT_TEMPLATE);
+    expect(merged.annotationTemplate).toBe(DEFAULT_ANNOTATION_TEMPLATE);
     expect(merged.typography).toEqual(DEFAULT_SETTINGS.typography);
     expect(merged.theme).toBe(DEFAULT_SETTINGS.theme);
     expect(merged.panels).toEqual(DEFAULT_SETTINGS.panels);

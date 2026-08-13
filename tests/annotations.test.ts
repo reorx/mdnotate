@@ -10,6 +10,7 @@ import {
   type Annotation,
   type StoredAnnotation,
 } from '../src/lib/annotations';
+import { DEFAULT_ANNOTATION_TEMPLATE } from '../src/lib/template';
 
 function make(partial: Partial<Annotation> & Pick<Annotation, 'id' | 'start'>): Annotation {
   return {
@@ -106,14 +107,16 @@ describe('splitStaleAnnotations', () => {
 });
 
 describe('annotationsToMarkdown', () => {
+  const T = DEFAULT_ANNOTATION_TEMPLATE;
+
   it('renders a highlight with comment as blockquote followed by the comment', () => {
     const list = [make({ id: 'a', start: 10, quote: 'some quoted text', comment: 'my thought' })];
-    expect(annotationsToMarkdown(list)).toBe('> some quoted text\n\nmy thought');
+    expect(annotationsToMarkdown(list, T)).toBe('> some quoted text\nmy thought');
   });
 
   it('renders a pure highlight as a blockquote only', () => {
     const list = [make({ id: 'a', start: 10, quote: 'just highlighted' })];
-    expect(annotationsToMarkdown(list)).toBe('> just highlighted');
+    expect(annotationsToMarkdown(list, T)).toBe('> just highlighted');
   });
 
   it('joins multiple annotations with blank lines, in document order', () => {
@@ -121,16 +124,31 @@ describe('annotationsToMarkdown', () => {
       make({ id: 'b', start: 50, quote: 'second', comment: 'note two' }),
       make({ id: 'a', start: 10, quote: 'first' }),
     ];
-    expect(annotationsToMarkdown(list)).toBe('> first\n\n> second\n\nnote two');
+    expect(annotationsToMarkdown(list, T)).toBe('> first\n\n> second\nnote two');
   });
 
   it('prefixes every line of a multi-line quote with "> "', () => {
     const list = [make({ id: 'a', start: 10, quote: 'line one\nline two', comment: 'c' })];
-    expect(annotationsToMarkdown(list)).toBe('> line one\n> line two\n\nc');
+    expect(annotationsToMarkdown(list, T)).toBe('> line one\n> line two\nc');
+  });
+
+  it('renders each annotation with the given template', () => {
+    const list = [make({ id: 'a', start: 10, quote: 'q', comment: 'c' })];
+    expect(annotationsToMarkdown(list, '- {{highlight}}\n  {{comment}}')).toBe('- q\n  c');
   });
 
   it('returns an empty string for no annotations', () => {
-    expect(annotationsToMarkdown([])).toBe('');
+    expect(annotationsToMarkdown([], T)).toBe('');
+  });
+
+  // A template that renders to nothing for a plain highlight must not leave a
+  // gap between the entries around it.
+  it('skips annotations the template renders to nothing', () => {
+    const list = [
+      make({ id: 'a', start: 10, quote: 'first' }),
+      make({ id: 'b', start: 50, quote: 'second', comment: 'note' }),
+    ];
+    expect(annotationsToMarkdown(list, '{{comment}}')).toBe('note');
   });
 });
 

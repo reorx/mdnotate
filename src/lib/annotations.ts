@@ -1,4 +1,5 @@
 import type { TextAnnotation } from '@recogito/text-annotator';
+import { renderAnnotationTemplate } from './template';
 
 /**
  * One user annotation on the document. A highlight and a comment are the same
@@ -122,17 +123,13 @@ export function annotationPreview(text: string): string {
 }
 
 /**
- * Serialize annotations to markdown: each highlight as a blockquote, followed
- * by its comment (if any), joined with blank lines, in document order.
+ * Serialize annotations to markdown: each one rendered with the annotation
+ * template, in document order, joined with blank lines. Entries the template
+ * renders to nothing are left out rather than joined as empty gaps.
  */
-export function annotationsToMarkdown(annotations: Annotation[]): string {
+export function annotationsToMarkdown(annotations: Annotation[], template: string): string {
   return sortAnnotations(annotations)
-    .map((a) => {
-      const quoteBlock = a.quote
-        .split('\n')
-        .map((line) => `> ${line}`)
-        .join('\n');
-      return a.comment ? `${quoteBlock}\n\n${a.comment}` : quoteBlock;
-    })
+    .map((a) => renderAnnotationTemplate(template, { highlight: a.quote, comment: a.comment ?? '' }))
+    .filter((entry) => entry.trim() !== '')
     .join('\n\n');
 }

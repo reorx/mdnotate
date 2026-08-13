@@ -10,6 +10,7 @@ export function ExportView() {
   const source = useAppStore((s) => s.doc?.source ?? '');
   const annotations = useAppStore((s) => s.annotations);
   const template = useAppStore((s) => s.settings.template);
+  const annotationTemplate = useAppStore((s) => s.settings.annotationTemplate);
   const setView = useAppStore((s) => s.setView);
   const [copied, setCopied] = useState(false);
 
@@ -17,9 +18,9 @@ export function ExportView() {
     () =>
       renderTemplate(template, {
         filePath: source,
-        annotations: annotationsToMarkdown(annotations),
+        annotations: annotationsToMarkdown(annotations, annotationTemplate),
       }),
-    [template, source, annotations],
+    [template, annotationTemplate, source, annotations],
   );
 
   const copy = async () => {

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { ArrowLeft, RotateCcw } from 'lucide-react';
 import type { DocFormat } from '../lib/doc-locator';
 import { saveSettings, type Settings } from '../lib/settings';
-import { DEFAULT_TEMPLATE } from '../lib/template';
+import { DEFAULT_ANNOTATION_TEMPLATE, DEFAULT_TEMPLATE } from '../lib/template';
 import type { ThemePreference } from '../lib/theme';
 import {
   clampTypography,
@@ -46,14 +46,13 @@ const PREVIEW_TEXT = `2026-08-11 22:04:11  INFO   started, reading config
 
 export function SettingsView() {
   const template = useAppStore((s) => s.settings.template);
+  const annotationTemplate = useAppStore((s) => s.settings.annotationTemplate);
   const typography = useAppStore((s) => s.settings.typography);
   const theme = useAppStore((s) => s.settings.theme);
   const resolvedTheme = useAppStore((s) => s.resolvedTheme);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const docFormat = useAppStore((s) => s.doc?.format ?? null);
   const setView = useAppStore((s) => s.setView);
-  const [draft, setDraft] = useState(template);
-  const [saved, setSaved] = useState(false);
   // Opened from a document, the tab worth landing on is the one that document
   // is rendered with. The view is unmounted when hidden, so this re-picks on
   // every visit rather than remembering a tab from another document.
@@ -88,11 +87,9 @@ export function SettingsView() {
     saveSettings({ theme: value }).catch(() => {});
   };
 
-  const saveTemplate = async (value: string) => {
-    updateSettings({ template: value });
-    await saveSettings({ template: value });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+  const saveTemplate = async (patch: Partial<Settings>) => {
+    updateSettings(patch);
+    await saveSettings(patch);
   };
 
   const current = typography[tab];
@@ -179,42 +176,100 @@ export function SettingsView() {
         </div>
 
         <div className="mt-7 border-t border-neutral-200 pt-5">
-          <label className="mb-1 block text-[13px] font-medium text-neutral-800">Export template</label>
-          <p className="mb-2 text-[12px] leading-snug text-neutral-500">
+          <TemplateField
+            label="Export template"
+            value={template}
+            fallback={DEFAULT_TEMPLATE}
+            rows={8}
+            onSave={(value) => saveTemplate({ template: value })}
+          >
             Placeholders: <code className="rounded bg-neutral-100 px-1">{'{{filePath}}'}</code> — the path of the opened
             file, or the title of a clipboard entry;{' '}
-            <code className="rounded bg-neutral-100 px-1">{'{{annotations}}'}</code> — the highlights as blockquotes,
-            each followed by its comment.
-          </p>
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={8}
-            spellCheck={false}
-            className="w-full resize-y rounded border border-neutral-300 p-2.5 font-mono text-[13px] leading-relaxed outline-none focus:border-amber-500"
-          />
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              className="rounded bg-amber-500 px-3 py-1 text-[13px] font-medium text-white hover:bg-amber-600"
-              onClick={() => saveTemplate(draft)}
-            >
-              Save
-            </button>
-            <button
-              className="flex items-center gap-1 rounded px-2 py-1 text-[13px] text-neutral-500 hover:bg-neutral-100"
-              onClick={() => {
-                setDraft(DEFAULT_TEMPLATE);
-                saveTemplate(DEFAULT_TEMPLATE);
-              }}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Reset to default
-            </button>
-            {saved && <span className="text-[12px] text-green-600">Saved</span>}
-          </div>
+            <code className="rounded bg-neutral-100 px-1">{'{{annotations}}'}</code> — every annotation, in document
+            order, separated by blank lines.
+          </TemplateField>
+        </div>
+
+        <div className="mt-6">
+          <TemplateField
+            label="Annotation template"
+            value={annotationTemplate}
+            fallback={DEFAULT_ANNOTATION_TEMPLATE}
+            rows={4}
+            onSave={(value) => saveTemplate({ annotationTemplate: value })}
+          >
+            One entry of the above — <code className="rounded bg-neutral-100 px-1">{'{{highlight}}'}</code> is the
+            highlighted text, <code className="rounded bg-neutral-100 px-1">{'{{comment}}'}</code> the comment on it. A
+            line whose placeholders all came out empty is left out whole, so a highlight without a comment leaves no
+            blank line behind; a value spanning several lines repeats whatever markers open its line, so{' '}
+            <code className="rounded bg-neutral-100 px-1">{'> {{highlight}}'}</code> quotes all of it.
+          </TemplateField>
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * A template, its placeholders explained, and the two buttons that put it away.
+ * Held as a draft rather than written on every keystroke: a template is only
+ * valid once it is finished being typed.
+ */
+function TemplateField({
+  label,
+  value,
+  fallback,
+  rows,
+  onSave,
+  children,
+}: {
+  label: string;
+  value: string;
+  fallback: string;
+  rows: number;
+  onSave: (value: string) => Promise<void>;
+  children: ReactNode;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [saved, setSaved] = useState(false);
+
+  const save = async (next: string) => {
+    await onSave(next);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+
+  return (
+    <>
+      <label className="mb-1 block text-[13px] font-medium text-neutral-800">{label}</label>
+      <p className="mb-2 text-[12px] leading-snug text-neutral-500">{children}</p>
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={rows}
+        spellCheck={false}
+        className="w-full resize-y rounded border border-neutral-300 p-2.5 font-mono text-[13px] leading-relaxed outline-none focus:border-amber-500"
+      />
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          className="rounded bg-amber-500 px-3 py-1 text-[13px] font-medium text-white hover:bg-amber-600"
+          onClick={() => save(draft)}
+        >
+          Save
+        </button>
+        <button
+          className="flex items-center gap-1 rounded px-2 py-1 text-[13px] text-neutral-500 hover:bg-neutral-100"
+          onClick={() => {
+            setDraft(fallback);
+            save(fallback);
+          }}
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Reset to default
+        </button>
+        {saved && <span className="text-[12px] text-green-600">Saved</span>}
+      </div>
+    </>
   );
 }
 

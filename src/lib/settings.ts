@@ -1,14 +1,17 @@
 import { load } from '@tauri-apps/plugin-store';
 import { clampPanelWidths, DEFAULT_PANEL_WIDTHS, type PanelWidths } from './panels';
 import { isTauri } from './tauri-env';
-import { DEFAULT_TEMPLATE } from './template';
+import { DEFAULT_ANNOTATION_TEMPLATE, DEFAULT_TEMPLATE } from './template';
 import { clampTheme, DEFAULT_THEME, type ThemePreference } from './theme';
 import { clampTypographySettings, DEFAULT_TYPOGRAPHY, type TypographySettings } from './typography';
 
 const STORE_FILE = 'settings.json';
 
 export interface Settings {
+  /** The document as a whole. */
   template: string;
+  /** One annotation within it. */
+  annotationTemplate: string;
   typography: TypographySettings;
   theme: ThemePreference;
   panels: PanelWidths;
@@ -16,13 +19,14 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   template: DEFAULT_TEMPLATE,
+  annotationTemplate: DEFAULT_ANNOTATION_TEMPLATE,
   typography: DEFAULT_TYPOGRAPHY,
   theme: DEFAULT_THEME,
   panels: DEFAULT_PANEL_WIDTHS,
 };
 
 /** Stored one entry per key, so writing one setting never rewrites the others. */
-const KEYS = ['template', 'typography', 'theme', 'panels'] as const;
+const KEYS = ['template', 'annotationTemplate', 'typography', 'theme', 'panels'] as const;
 
 type StoredSettings = Partial<Record<keyof Settings, unknown>>;
 
@@ -34,6 +38,8 @@ type StoredSettings = Partial<Record<keyof Settings, unknown>>;
 export function mergeSettings(stored: StoredSettings): Settings {
   return {
     template: typeof stored.template === 'string' ? stored.template : DEFAULT_SETTINGS.template,
+    annotationTemplate:
+      typeof stored.annotationTemplate === 'string' ? stored.annotationTemplate : DEFAULT_SETTINGS.annotationTemplate,
     typography: clampTypographySettings(stored.typography),
     theme: clampTheme(stored.theme),
     panels: clampPanelWidths(stored.panels),
