@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:signed": "scripts/build-signed.sh"
   },
   "dependencies": {
     "@recogito/text-annotator": "^4.2.5",
