@@ -10,6 +10,7 @@ import { typographyVars } from '../lib/typography';
 import { useTextAnnotator } from '../lib/use-text-annotator';
 import { AnnotationList } from './AnnotationList';
 import { AnnotationPopup } from './AnnotationPopup';
+import { CommentMarkers } from './CommentMarkers';
 import { Toc } from './Toc';
 
 /**
@@ -213,6 +214,7 @@ export function Reader() {
           ) : (
             <article className="prose-plain">{content ?? ''}</article>
           )}
+          <CommentMarkers markers={annotator.commentMarkers} onOpen={annotator.openAnnotation} />
           {popup && (
             <AnnotationPopup
               key={popup.kind === 'draft' ? popup.draftId : popup.annotationId}
@@ -222,7 +224,7 @@ export function Reader() {
               onAnnotate={(comment) => annotator.commitDraft(comment)}
               onDelete={annotator.deleteAnnotation}
               onSaveComment={annotator.saveComment}
-              onDismiss={annotator.discardDraft}
+              onDismiss={annotator.dismissPopup}
             />
           )}
         </div>

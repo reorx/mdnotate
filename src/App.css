@@ -56,10 +56,11 @@
  * the loud text. Redefining the variables here flips every one of them at once,
  * and a component written tomorrow gets dark mode without being asked.
  *
- * The tints are the exception: `amber-50/100` and `red-50/200` are washes that
- * would glare on a dark page, and `amber-700` / `red-700` are the text on those
- * washes, so both ends swap roles. Anything used only as a foreground on a solid
- * button (amber-500/600, white) is left alone.
+ * The tints are the exception: `amber-50/100/200` and `red-50/200` are washes
+ * that would glare on a dark page, and `amber-700` / `red-700` are the text on
+ * those washes, so both ends swap roles. Anything used only as a foreground —
+ * on a solid button, or as the fill of an icon (amber-400/500/600, white) — is
+ * left alone.
  */
 .dark {
   --color-page: #1a1a1b;
@@ -78,6 +79,7 @@
 
   --color-amber-50: #3a2c0f;
   --color-amber-100: #4a3813;
+  --color-amber-200: #5f4818;
   --color-amber-700: #fbbf24;
 
   --color-red-50: #3a1d1d;

@@ -6,6 +6,7 @@ import {
   type TextAnnotator,
 } from '@recogito/text-annotator';
 import '@recogito/text-annotator/text-annotator.css';
+import { commentMarkers, sameMarkers, type CommentMarker, type MarkerRect } from './annotation-markers';
 import { fromRecogitoAnnotation, toRecogitoAnnotation, type Annotation } from './annotations';
 import type { ResolvedTheme } from './theme';
 
@@ -67,6 +68,7 @@ export function useTextAnnotator({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const annoRef = useRef<TextAnnotator | null>(null);
   const [popup, setPopup] = useState<AnnotationPopupState | null>(null);
+  const [markers, setMarkers] = useState<CommentMarker[]>([]);
 
   const annotationsRef = useRef(annotations);
   annotationsRef.current = annotations;
@@ -80,6 +82,53 @@ export function useTextAnnotator({
   const setPopupState = (next: AnnotationPopupState | null) => {
     popupRef.current = next;
     setPopup(next);
+  };
+
+  /** Close the popup, whichever kind it is; an uncommitted draft goes with it. */
+  const dismissPopup = () => {
+    const anno = annoRef.current;
+    const current = popupRef.current;
+    if (!anno || !current) return;
+    setPopupState(null);
+    if (current.kind === 'draft') anno.removeAnnotation(current.draftId);
+    anno.cancelSelected();
+  };
+
+  /**
+   * Mirror the rectangles the library just painted into our own marker set.
+   *
+   * The icons cannot live in the library's highlight layer: it wipes and
+   * repaints that layer wholesale on every redraw, and composites it with a
+   * blend mode that would swallow an icon's colour. So we read the rectangles
+   * back off the [data-annotation] spans — the same source the view popup is
+   * positioned from — and draw over them.
+   */
+  const refreshMarkers = () => {
+    const el = containerRef.current;
+    if (!el) {
+      setMarkers([]);
+      return;
+    }
+    const containerRect = el.getBoundingClientRect();
+    const rects = new Map<string, MarkerRect[]>();
+    for (const span of el.querySelectorAll<HTMLElement>('[data-annotation]')) {
+      const id = span.dataset.annotation;
+      if (!id) continue;
+      const rect = span.getBoundingClientRect();
+      const painted: MarkerRect = {
+        top: rect.top - containerRect.top,
+        left: rect.left - containerRect.left,
+        width: rect.width,
+        height: rect.height,
+      };
+      const existing = rects.get(id);
+      if (existing) existing.push(painted);
+      else rects.set(id, [painted]);
+    }
+    const next = commentMarkers(annotationsRef.current, rects);
+    // A redraw follows every scroll frame, and almost none of them move an
+    // icon; re-rendering only when one actually moved keeps scrolling cheap.
+    setMarkers((prev) => (sameMarkers(prev, next) ? prev : next));
   };
 
   useEffect(() => {
@@ -158,27 +207,38 @@ export function useTextAnnotator({
     anno.on('clickAnnotation', onClickAnnotation);
     anno.on('selectionChanged', onSelectionChanged);
 
+    // Fired after every repaint of the highlight layer — including the forced
+    // ones on scroll and resize — which is exactly when an icon could have
+    // moved.
+    const stopRedraw = anno.renderer.on('onRedraw', refreshMarkers);
+    refreshMarkers();
+
     // The library only watches pointer events inside its container, so a click
     // elsewhere would leave the popup (and an uncommitted draft) dangling.
     const onDocumentPointerDown = (event: PointerEvent) => {
-      const current = popupRef.current;
-      if (!current) return;
+      if (!popupRef.current) return;
       const target = event.target;
       if (target instanceof Node && el.contains(target)) return;
-      if (current.kind === 'draft') anno.removeAnnotation(current.draftId);
-      setPopupState(null);
-      anno.cancelSelected();
+      dismissPopup();
     };
     document.addEventListener('pointerdown', onDocumentPointerDown, true);
 
     return () => {
       document.removeEventListener('pointerdown', onDocumentPointerDown, true);
+      stopRedraw();
       annoRef.current = null;
       setPopupState(null);
+      setMarkers([]);
       anno.destroy();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, documentKey]);
+
+  // Adding or clearing a comment moves no rectangle, so the redraw it triggers
+  // may well paint the very same layer — but it does change which highlights
+  // get an icon.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(refreshMarkers, [annotations]);
 
   // Restyling in place rather than through the effect above: rebuilding the
   // annotator on a theme change would throw away the draft and the selection.
@@ -207,13 +267,9 @@ export function useTextAnnotator({
     anno.cancelSelected();
   };
 
-  const discardDraft = () => {
-    const anno = annoRef.current;
-    const current = popupRef.current;
-    if (!anno || current?.kind !== 'draft') return;
-    setPopupState(null);
-    anno.removeAnnotation(current.draftId);
-    anno.cancelSelected();
+  /** Open an existing annotation's popup, as clicking its highlight would. */
+  const openAnnotation = (id: string) => {
+    annoRef.current?.setSelected(id);
   };
 
   const deleteAnnotation = (id: string) => {
@@ -243,8 +299,10 @@ export function useTextAnnotator({
   return {
     containerRef,
     popup,
+    commentMarkers: markers,
     commitDraft,
-    discardDraft,
+    dismissPopup,
+    openAnnotation,
     deleteAnnotation,
     saveComment,
     scrollToAnnotation,
