@@ -25,6 +25,24 @@
                 <string>net.daringfireball.markdown</string>
             </array>
         </dict>
+        <!-- Extension-only claim: when LSItemContentTypes is present macOS ignores
+             CFBundleTypeExtensions in that entry, and third-party editors (iA Writer,
+             Typora) export their own markdown UTIs that can win the .md binding.
+             This entry claims whatever UTI the extensions bind to on each machine,
+             so mdnotate stays selectable in Finder's Open With chooser. -->
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Markdown document (extension)</string>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>md</string>
+                <string>markdown</string>
+            </array>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Default</string>
+        </dict>
     </array>
     <key>CFBundleURLTypes</key>
     <array>

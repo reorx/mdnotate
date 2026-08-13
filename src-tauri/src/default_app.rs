@@ -1,8 +1,13 @@
 //! Reading and changing the app macOS uses to open Markdown files.
 //!
-//! LaunchServices keys the association off a content type rather than the file
-//! extension; `net.daringfireball.markdown` is the system-declared UTI that
-//! covers both `.md` and `.markdown`, and is what `Info.plist` claims.
+//! LaunchServices keys the association off a content type (UTI) rather than the
+//! file extension, and which UTI `.md` maps to is machine-dependent: editors
+//! like iA Writer and Typora *export* their own markdown UTIs
+//! (`net.ia.markdown`, `io.typora.markdown`) and can win the extension binding
+//! over `net.daringfireball.markdown`. A handler set on the wrong UTI reads
+//! back as "default" while Finder keeps opening something else. So the UTIs
+//! are resolved per machine from the extensions, with the daringfireball one
+//! kept as a fallback claim.
 
 use serde::Serialize;
 
@@ -44,6 +49,30 @@ mod sys {
             handler_bundle_id: CFStringRef,
         ) -> i32;
         fn LSCopyApplicationURLsForBundleIdentifier(bundle_id: CFStringRef, out_error: *mut c_void) -> CFArrayRef;
+        fn UTTypeCreatePreferredIdentifierForTag(
+            tag_class: CFStringRef,
+            tag: CFStringRef,
+            conforming_to: CFStringRef,
+        ) -> CFStringRef;
+    }
+
+    /// The UTI this machine currently binds the extension to. Never `None` in
+    /// practice: with no declared type LaunchServices mints a `dyn.*` UTI,
+    /// which set/read handler calls accept just the same.
+    pub fn preferred_uti_for_extension(ext: &str) -> Option<String> {
+        let tag_class = CFString::from_static_string("public.filename-extension");
+        let tag = CFString::new(ext);
+        let uti = unsafe {
+            UTTypeCreatePreferredIdentifierForTag(
+                tag_class.as_concrete_TypeRef(),
+                tag.as_concrete_TypeRef(),
+                ptr::null(),
+            )
+        };
+        if uti.is_null() {
+            return None;
+        }
+        Some(unsafe { CFString::wrap_under_create_rule(uti) }.to_string())
     }
 
     pub fn default_handler(uti: &str) -> Option<String> {
@@ -85,7 +114,27 @@ mod sys {
 }
 
 #[cfg(target_os = "macos")]
-const MARKDOWN_UTI: &str = "net.daringfireball.markdown";
+const MARKDOWN_FALLBACK_UTI: &str = "net.daringfireball.markdown";
+
+/// UTIs to associate, most user-visible first: whatever `.md` / `.markdown`
+/// actually resolve to on this machine, then the daringfireball UTI as a
+/// fallback (it is also what `Info.plist` claims explicitly).
+#[cfg(target_os = "macos")]
+fn markdown_utis() -> Vec<String> {
+    let mut utis: Vec<String> = Vec::new();
+    for ext in ["md", "markdown"] {
+        if let Some(uti) = sys::preferred_uti_for_extension(ext) {
+            if !utis.contains(&uti) {
+                utis.push(uti);
+            }
+        }
+    }
+    let fallback = MARKDOWN_FALLBACK_UTI.to_string();
+    if !utis.contains(&fallback) {
+        utis.push(fallback);
+    }
+    utis
+}
 
 /// `/Applications/Neovide.app` -> `Neovide`.
 #[cfg(target_os = "macos")]
@@ -96,10 +145,17 @@ fn app_display_name(bundle_id: &str) -> Option<String> {
 
 #[cfg(target_os = "macos")]
 pub fn status(bundle_id: &str) -> DefaultAppStatus {
-    let handler = sys::default_handler(MARKDOWN_UTI);
+    let handlers: Vec<Option<String>> = markdown_utis().iter().map(|uti| sys::default_handler(uti)).collect();
+    // Every resolved UTI must point at us; a handler on the fallback UTI alone
+    // is exactly the "reads as default but Finder disagrees" trap.
+    let is_default = handlers
+        .iter()
+        .all(|h| h.as_deref().is_some_and(|h| h.eq_ignore_ascii_case(bundle_id)));
+    // Surface the handler of the UTI `.md` actually binds to — the one Finder uses.
+    let handler = handlers.into_iter().next().flatten();
     DefaultAppStatus {
         supported: true,
-        is_default: handler.as_deref().is_some_and(|h| h.eq_ignore_ascii_case(bundle_id)),
+        is_default,
         current_handler_name: handler.as_deref().and_then(app_display_name),
         current_handler_id: handler,
         app_registered: sys::app_path(bundle_id).is_some(),
@@ -110,7 +166,9 @@ pub fn status(bundle_id: &str) -> DefaultAppStatus {
 /// prompt macOS raises, so callers poll [`status`] for the outcome.
 #[cfg(target_os = "macos")]
 pub fn request_default(bundle_id: &str) {
-    sys::set_default_handler(MARKDOWN_UTI, bundle_id);
+    for uti in markdown_utis() {
+        sys::set_default_handler(&uti, bundle_id);
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -145,5 +203,19 @@ mod tests {
         assert!(s.supported);
         assert!(!s.is_default);
         assert!(!s.app_registered);
+    }
+
+    /// `.md` must resolve to *some* UTI on every machine (a third-party
+    /// exported one, the daringfireball one, or a minted `dyn.*`), and the
+    /// list must keep the fallback claim without duplicating entries.
+    #[test]
+    fn resolves_markdown_utis_for_this_machine() {
+        let utis = markdown_utis();
+        assert!(utis.iter().any(|u| u == MARKDOWN_FALLBACK_UTI));
+        assert!(!utis[0].is_empty());
+        let mut deduped = utis.clone();
+        deduped.sort();
+        deduped.dedup();
+        assert_eq!(deduped.len(), utis.len());
     }
 }
