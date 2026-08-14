@@ -31,6 +31,9 @@
     "active": true,
     "targets": "all",
     "category": "Productivity",
+    "resources": {
+      "resources/bin/mdnotate": "bin/mdnotate"
+    },
     "fileAssociations": [
       {
         "ext": ["md", "markdown"],

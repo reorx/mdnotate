@@ -1,5 +1,6 @@
 import { openSampleDoc } from '../lib/open-doc';
 import { isTauri } from '../lib/tauri-env';
+import { CliInstallCard } from './CliInstallCard';
 import { ClipboardCard } from './ClipboardCard';
 import { DefaultAppCard } from './DefaultAppCard';
 import { OpenFileCard } from './OpenFileCard';
@@ -17,6 +18,7 @@ export function Home() {
         <ClipboardCard />
         <RecentList />
         <DefaultAppCard />
+        <CliInstallCard />
 
         {import.meta.env.DEV && !isTauri && (
           <button className="self-start px-2 text-[12px] text-neutral-400 underline" onClick={() => openSampleDoc()}>

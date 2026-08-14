@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+mod cli_install;
 mod default_app;
 
 use std::collections::HashMap;
@@ -11,6 +13,8 @@ use tauri::utils::config::WindowConfig;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+#[cfg(target_os = "macos")]
+use cli_install::CliInstallStatus;
 use default_app::DefaultAppStatus;
 
 /// Recently opened documents. Files are remembered by path; clipboard entries
@@ -461,12 +465,12 @@ const MAX_REMOTE_BYTES: u64 = 8 * 1024 * 1024;
 /// Wrap a path for the remote shell. ssh joins its trailing arguments with
 /// spaces and hands the result to a shell we do not control, so the path has to
 /// arrive already quoted or every space in it becomes an argument break.
-fn shell_quote(s: &str) -> String {
+pub(crate) fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', r"'\''"))
 }
 
 /// The most useful line of ssh's complaint, which is the last one it wrote.
-fn last_line(stderr: &str) -> String {
+pub(crate) fn last_line(stderr: &str) -> String {
     stderr
         .lines()
         .filter(|l| !l.trim().is_empty())
@@ -552,6 +556,57 @@ fn markdown_default_app_status(app: AppHandle) -> DefaultAppStatus {
 #[tauri::command]
 fn set_markdown_default_app(app: AppHandle) {
     default_app::request_default(&app.config().identifier);
+}
+
+/// Where the app's own bundled CLI script is, and every directory worth looking
+/// in for a link to it. `custom_dir` is a directory the user typed in some
+/// earlier session and the frontend has remembered for us: this side keeps no
+/// state, so without being told again it would report a command installed
+/// somewhere unusual as missing.
+#[cfg(target_os = "macos")]
+fn cli_dirs(app: &AppHandle, custom_dir: Option<String>) -> (Vec<PathBuf>, PathBuf) {
+    let home = app.path().home_dir().unwrap_or_else(|_| PathBuf::from("/"));
+    let script = app
+        .path()
+        .resource_dir()
+        .map(|dir| cli_install::script_path(&dir))
+        .unwrap_or_default();
+    let mut dirs = cli_install::well_known_dirs(&home);
+    // Appended rather than replacing anything, and only when it is somewhere
+    // new: a custom directory that happens to be one of the two well-known ones
+    // would otherwise be reported on twice.
+    if let Some(dir) = custom_dir {
+        let dir = PathBuf::from(dir);
+        if !dirs.contains(&dir) {
+            dirs.push(dir);
+        }
+    }
+    (dirs, script)
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn cli_install_status(app: AppHandle, custom_dir: Option<String>) -> CliInstallStatus {
+    let (dirs, script) = cli_dirs(&app, custom_dir);
+    cli_install::status(&dirs, &script)
+}
+
+/// Put the `mdnotate` command in `dir`. Must be async: a directory we cannot
+/// write to sends this through macOS's administrator prompt, and that prompt
+/// stays up until the user answers it — on the main thread, that is the whole
+/// window frozen behind it.
+#[cfg(target_os = "macos")]
+#[tauri::command(async)]
+fn cli_install(app: AppHandle, dir: String) -> Result<(), String> {
+    let (_, script) = cli_dirs(&app, None);
+    cli_install::install(Path::new(&dir), &script)
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command(async)]
+fn cli_uninstall(app: AppHandle, dir: String) -> Result<(), String> {
+    let (_, script) = cli_dirs(&app, None);
+    cli_install::uninstall(Path::new(&dir), &script)
 }
 
 // Window dragging for the toolbar. tauri's stock `start_dragging` reaches
@@ -771,6 +826,9 @@ pub fn run() {
             set_window_doc,
             markdown_default_app_status,
             set_markdown_default_app,
+            cli_install_status,
+            cli_install,
+            cli_uninstall,
             start_window_drag
         ])
         .on_window_event(|window, event| match event {

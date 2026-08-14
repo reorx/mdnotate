@@ -1,0 +1,183 @@
+#!/bin/sh
+# The `mdnotate` command.
+#
+# This is never run from where it sits. It is reached through a symlink dropped
+# somewhere on PATH — the shape VS Code's `code` has — so its first job is to
+# find its way back through that link to the .app it belongs to, and its second
+# is to hand the files to `open`. Everything after that is the app's own, long
+# since settled: LaunchServices starts it if it is not running and delivers to
+# it if it is, both arriving as `application:openURLs:`, which is the same door
+# a double-click in Finder comes in by. Which window each file lands in is
+# `choose_target`'s to say, exactly as it is for a double-click.
+#
+# POSIX sh only. /bin/sh on macOS is bash 3.2 in posix mode: no arrays, no
+# `[[ ]]`, and no `readlink -f`, which is a GNU extension this is not.
+
+set -eu
+# So that a path is walked one byte at a time below rather than one character,
+# which is what percent-encoding has to be done in.
+export LC_ALL=C
+
+OPEN=/usr/bin/open
+DEFAULTS=/usr/bin/defaults
+
+usage() {
+  cat <<'EOF'
+Usage: mdnotate [file ...]
+       mdnotate <host>:<path>
+       mdnotate <mdnotate:// link>
+
+Opens documents in mdnotate, starting it if it is not already running. With no
+arguments it brings the app to the front.
+
+  file              A local path, absolute or relative to the current directory
+  <host>:<path>     A file on another machine, read over ssh. `host` is an alias
+                    from ~/.ssh/config; the path is relative to the remote home
+                    unless it starts with a slash. Quote it if it contains a `~`,
+                    or the shell will expand that here rather than there.
+  mdnotate:// link  Opened as it stands
+
+  -h, --help        Show this
+  -v, --version     Show the version of the app this command belongs to
+  --                Everything after this is a file, even if it starts with -
+EOF
+}
+
+die() {
+  echo "mdnotate: $1" >&2
+  exit 1
+}
+
+# --- find where this script really lives -------------------------------------
+#
+# Reached through PATH, `$0` is normally the full path the lookup found, but a
+# shell is free to pass the bare word instead — in which case PATH is the only
+# thing that knows where it came from, and asking it again is the way back.
+case "$0" in
+  */*) script=$0 ;;
+  *) script=$(command -v "$0") || die "could not work out my own path (argv0 was '$0')" ;;
+esac
+
+# One symlink hop at a time, because a link's target may itself be a link, and
+# may be written relative to the directory the link sits in rather than to ours.
+# `readlink` on something that is not a link prints nothing and fails, which is
+# this loop's exit condition rather than an error — hence the test up front.
+hops=0
+while [ -L "$script" ]; do
+  hops=$((hops + 1))
+  [ "$hops" -le 40 ] || die "too many symlinks to follow from $0"
+  target=$(readlink "$script")
+  case "$target" in
+    /*) script=$target ;;
+    *) script=$(cd "$(dirname "$script")" && pwd)/$target ;;
+  esac
+done
+# Only the PATH lookup above can land on something that is not there: a link
+# whose target has been deleted cannot be run at all, and the shell says so
+# before any of this gets a chance to.
+[ -f "$script" ] || die "$script is not a file"
+script=$(cd "$(dirname "$script")" && pwd)/$(basename "$script")
+
+# --- and which .app that is ---------------------------------------------------
+app=$(dirname "$script")
+while :; do
+  case "$app" in
+    *.app) break ;;
+    / | .) die "$script is not inside a .app bundle" ;;
+  esac
+  app=$(dirname "$app")
+done
+
+# --- the two arguments that answer instead of opening anything ---------------
+case "${1:-}" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  -v | --version)
+    # Read off the bundle rather than written down here, so that it is the
+    # version of the app this command actually opens, and so that releasing a
+    # new one never has to remember this file.
+    version=$("$DEFAULTS" read "$app/Contents/Info" CFBundleShortVersionString 2>/dev/null) ||
+      die "could not read the version out of $app"
+    echo "mdnotate $version"
+    exit 0
+    ;;
+  # The usual way to say "everything after this is a filename", which is the
+  # only way to name a file that starts with a dash.
+  --)
+    shift
+    ;;
+  -*) die "unrecognized option '$1' — try 'mdnotate --help'" ;;
+esac
+
+if [ "$#" -eq 0 ]; then
+  exec "$OPEN" -a "$app"
+fi
+
+# --- percent-encode one argument to go in a link ------------------------------
+#
+# Byte by byte, escaping everything outside RFC 3986's unreserved set, which is
+# what encodeURIComponent does and what the link grammar needs: `&` and `#` have
+# to arrive as %26 and %23 or the query is cut short at them. Escaping more than
+# strictly necessary costs nothing — the other end reads the value back through
+# URLSearchParams, which decodes whatever it is given.
+urlencode() {
+  rest=$1
+  out=
+  while [ -n "$rest" ]; do
+    # ${rest#?} is everything but the first byte, so trimming that off the end
+    # of $rest leaves the first byte alone — parameter expansion only, no forks.
+    byte=${rest%"${rest#?}"}
+    rest=${rest#?}
+    case "$byte" in
+      [A-Za-z0-9._~-]) out=$out$byte ;;
+      # Masked to a byte because `printf %d` reads a character as a signed one,
+      # so every byte of a non-ascii character comes back negative and would be
+      # written out as its two's complement in full.
+      *) out=$out$(printf '%%%02X' "$(($(printf '%d' "'$byte") & 255))") ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
+# --- sort the arguments into files and links ---------------------------------
+#
+# Local files are collected up and opened in one go; anything naming another
+# machine is wrapped into a link, because that grammar is the app's to read and
+# `open` would only look for a file by that name. Without arrays, the way to
+# collect them is to rotate the positional parameters: every argument is shifted
+# off the front exactly once, and the ones that are files are pushed onto the
+# back, so what is left in "$@" at the end is precisely the file list.
+count=$#
+seen=0
+status=0
+while [ "$seen" -lt "$count" ]; do
+  arg=$1
+  shift
+  seen=$((seen + 1))
+  case "$arg" in
+    [Mm][Dd][Nn][Oo][Tt][Aa][Tt][Ee]://*)
+      # Already a link, so it is passed on whole rather than wrapped in a second
+      # one, which would bury it in its own `path` parameter.
+      "$OPEN" "$arg" || status=1
+      ;;
+    *)
+      # `doc-locator`'s rule for telling a remote path from a local one, and the
+      # only piece of that grammar repeated here: a colon before the first slash
+      # names a host. So `/notes/2026:08:11.md` is still a local file.
+      case "${arg%%/*}" in
+        *:*) "$OPEN" "mdnotate://open?path=$(urlencode "$arg")" || status=1 ;;
+        *) set -- "$@" "$arg" ;;
+      esac
+      ;;
+  esac
+done
+
+# `open` resolves a relative path against the directory it was run in, which is
+# this one, so the paths go over as they were typed.
+if [ "$#" -gt 0 ]; then
+  "$OPEN" -a "$app" -- "$@" || status=1
+fi
+
+exit "$status"

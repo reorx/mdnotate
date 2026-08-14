@@ -15,6 +15,13 @@ export interface Settings {
   typography: TypographySettings;
   theme: ThemePreference;
   panels: PanelWidths;
+  /**
+   * A directory the `mdnotate` command was installed into by hand. Remembered
+   * only so it can be looked in again: the two directories the card offers are
+   * constants both sides already know, but one the user typed is nowhere to be
+   * found afterwards, and the command would read as uninstalled next time.
+   */
+  cliInstallDir: string | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -23,10 +30,11 @@ export const DEFAULT_SETTINGS: Settings = {
   typography: DEFAULT_TYPOGRAPHY,
   theme: DEFAULT_THEME,
   panels: DEFAULT_PANEL_WIDTHS,
+  cliInstallDir: null,
 };
 
 /** Stored one entry per key, so writing one setting never rewrites the others. */
-const KEYS = ['template', 'annotationTemplate', 'typography', 'theme', 'panels'] as const;
+const KEYS = ['template', 'annotationTemplate', 'typography', 'theme', 'panels', 'cliInstallDir'] as const;
 
 type StoredSettings = Partial<Record<keyof Settings, unknown>>;
 
@@ -43,6 +51,11 @@ export function mergeSettings(stored: StoredSettings): Settings {
     typography: clampTypographySettings(stored.typography),
     theme: clampTheme(stored.theme),
     panels: clampPanelWidths(stored.panels),
+    // Only ever written as a full path, so anything else is not a directory we
+    // could look in — and a relative one would be resolved against wherever the
+    // app happens to have been launched from.
+    cliInstallDir:
+      typeof stored.cliInstallDir === 'string' && stored.cliInstallDir.startsWith('/') ? stored.cliInstallDir : null,
   };
 }
 

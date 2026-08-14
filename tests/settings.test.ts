@@ -36,6 +36,15 @@ describe('mergeSettings', () => {
     });
   });
 
+  it('keeps a stored CLI install directory', () => {
+    expect(mergeSettings({ cliInstallDir: '/opt/bin' }).cliInstallDir).toBe('/opt/bin');
+  });
+
+  // Anything but a full path names nowhere we could go and look.
+  it('forgets a CLI install directory that is not an absolute path', () => {
+    expect(mergeSettings({ cliInstallDir: 'bin' }).cliInstallDir).toBeNull();
+  });
+
   // A hand-edited settings.json must never be able to keep the reader shut.
   it('falls back for values of the wrong type instead of throwing', () => {
     const merged = mergeSettings({
@@ -44,7 +53,9 @@ describe('mergeSettings', () => {
       typography: 'large',
       theme: 'sepia',
       panels: 'wide',
+      cliInstallDir: 7,
     });
+    expect(merged.cliInstallDir).toBeNull();
     expect(merged.template).toBe(DEFAULT_TEMPLATE);
     expect(merged.annotationTemplate).toBe(DEFAULT_ANNOTATION_TEMPLATE);
     expect(merged.typography).toEqual(DEFAULT_SETTINGS.typography);
