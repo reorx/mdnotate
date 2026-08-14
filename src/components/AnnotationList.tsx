@@ -11,7 +11,6 @@ interface AnnotationListProps {
 
 export function AnnotationList({ annotations, activeId, onJump }: AnnotationListProps) {
   const activeRef = useRef<HTMLButtonElement | null>(null);
-  const wash = (active: boolean) => (active ? 'bg-amber-200' : 'bg-amber-100');
 
   // Follow the document: clicking a highlight in the text marks its entry
   // active, which is of no use if the entry sits outside the panel's viewport.
@@ -55,16 +54,12 @@ export function AnnotationList({ annotations, activeId, onJump }: AnnotationList
                   {index + 1}
                 </span>
                 <span className="min-w-0 flex-1">
-                  {/* The quote wears the amber wash it wears in the document, so
-                      an entry reads as a highlight whether or not it is the
-                      current one — and the current one's wash deepens, the same
-                      move the annotator makes on the highlight itself when it is
-                      selected. */}
-                  <span
-                    className={`-mx-0.5 block line-clamp-3 rounded-sm px-0.5 text-[13px] leading-snug text-neutral-700 ${wash(
-                      active,
-                    )}`}
-                  >
+                  {/* Plain text, not the amber wash it wears in the document: a
+                      panel of nothing but quotes is a panel of solid amber, and
+                      the wash stops meaning "highlighted" once everything is.
+                      Which entry is current is the row's own business — border,
+                      background and number all say it. */}
+                  <span className="block line-clamp-3 text-[13px] leading-snug text-neutral-700">
                     {annotationPreview(annotation.quote)}
                   </span>
                   {/* The icon marks the same thing here as it does in the text.

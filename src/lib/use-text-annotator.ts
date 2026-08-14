@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import {
   createTextAnnotator,
   NOT_ANNOTATABLE_CLASS,
@@ -8,24 +8,37 @@ import {
 import '@recogito/text-annotator/text-annotator.css';
 import { commentMarkers, sameMarkers, type CommentMarker, type MarkerRect } from './annotation-markers';
 import { fromRecogitoAnnotation, toRecogitoAnnotation, type Annotation } from './annotations';
+import type { PopupAnchor, PopupBounds } from './popup-position';
 import type { ResolvedTheme } from './theme';
 
 export { NOT_ANNOTATABLE_CLASS };
 
-export interface AnnotationPopupPosition {
-  top: number;
-  left: number;
+/**
+ * What the popup hangs off, and the room it has to hang in. Both are read once,
+ * when the popup opens: the popup scrolls with the text it belongs to, so the
+ * anchor stays true, and the card decides for itself where to sit relative to
+ * it (see `popup-position`) once it knows how big it is.
+ */
+export interface AnnotationPopupPlacement {
+  anchor: PopupAnchor;
+  bounds: PopupBounds;
 }
 
 export type AnnotationPopupState =
-  | { kind: 'draft'; draftId: string; position: AnnotationPopupPosition }
-  | { kind: 'view'; annotationId: string; position: AnnotationPopupPosition };
+  | ({ kind: 'draft'; draftId: string } & AnnotationPopupPlacement)
+  | ({ kind: 'view'; annotationId: string } & AnnotationPopupPlacement);
 
 export interface UseTextAnnotatorOptions {
   /** Only enable on stable, fully-rendered content. */
   enabled: boolean;
   /** Recreate the annotator when the underlying document changes. */
   documentKey?: string | null;
+  /**
+   * The reader's own scroller. Passed in rather than guessed: the library walks
+   * up from the container to find one, which a document that happens not to
+   * overflow sends all the way to the page root.
+   */
+  scrollRef: RefObject<HTMLElement | null>;
   annotations: Annotation[];
   /** Highlights are blended into the page, so they depend on what is under them. */
   theme: ResolvedTheme;
@@ -33,8 +46,6 @@ export interface UseTextAnnotatorOptions {
   onRemove: (id: string) => void;
   onSetComment: (id: string, comment: string | null) => void;
 }
-
-const POPUP_WIDTH = 260;
 
 /**
  * The same amber either way; what changes is how much of it survives the blend.
@@ -59,6 +70,7 @@ function highlightStyle(theme: ResolvedTheme) {
 export function useTextAnnotator({
   enabled,
   documentKey,
+  scrollRef,
   annotations,
   theme,
   onCreate,
@@ -142,46 +154,54 @@ export function useTextAnnotator({
     anno.setAnnotations(annotationsRef.current.map(toRecogitoAnnotation));
     annoRef.current = anno;
 
-    const clampLeft = (left: number, containerRect: DOMRect) =>
-      Math.max(0, Math.min(left, containerRect.width - POPUP_WIDTH));
+    const toAnchor = (rect: DOMRect, containerRect: DOMRect): PopupAnchor => ({
+      top: rect.top - containerRect.top,
+      bottom: rect.bottom - containerRect.top,
+      left: rect.left - containerRect.left,
+    });
 
-    const positionFor = (fallback: { x: number; y: number } | null): AnnotationPopupPosition => {
+    /** How much of the container the reader can currently see. */
+    const boundsNow = (containerRect: DOMRect): PopupBounds => {
+      const view = scrollRef.current?.getBoundingClientRect();
+      return {
+        width: containerRect.width,
+        top: view ? view.top - containerRect.top : 0,
+        bottom: view ? view.bottom - containerRect.top : containerRect.height,
+      };
+    };
+
+    const placementFor = (anchor: PopupAnchor, containerRect: DOMRect): AnnotationPopupPlacement => ({
+      anchor,
+      bounds: boundsNow(containerRect),
+    });
+
+    const placementForSelection = (fallback: { x: number; y: number } | null): AnnotationPopupPlacement => {
       const containerRect = el.getBoundingClientRect();
       const selection = document.getSelection();
       if (selection && !selection.isCollapsed && selection.rangeCount > 0) {
-        const rect = selection.getRangeAt(0).getBoundingClientRect();
-        return {
-          top: rect.bottom - containerRect.top,
-          left: clampLeft(rect.left - containerRect.left, containerRect),
-        };
+        return placementFor(toAnchor(selection.getRangeAt(0).getBoundingClientRect(), containerRect), containerRect);
       }
       if (fallback) {
-        return {
-          top: fallback.y - containerRect.top,
-          left: clampLeft(fallback.x - containerRect.left, containerRect),
-        };
+        const point = { top: fallback.y - containerRect.top, left: fallback.x - containerRect.left };
+        return placementFor({ ...point, bottom: point.top }, containerRect);
       }
-      return { top: 0, left: 0 };
+      return placementFor({ top: 0, bottom: 0, left: 0 }, containerRect);
     };
 
     const onClickAnnotation = (_annotation: TextAnnotation, event: PointerEvent) => {
       lastPointerRef.current = { x: event.clientX, y: event.clientY };
     };
 
-    // Position the view popup at the highlight itself (rendered by the SPANS
+    // Anchor the view popup to the highlight itself (rendered by the SPANS
     // renderer as [data-annotation] overlay spans); fall back to the click
     // point when the overlay is not there yet.
-    const positionForView = (id: string): AnnotationPopupPosition => {
+    const placementForView = (id: string): AnnotationPopupPlacement => {
       const span = el.querySelector(`[data-annotation="${CSS.escape(id)}"]`);
       if (span) {
         const containerRect = el.getBoundingClientRect();
-        const rect = span.getBoundingClientRect();
-        return {
-          top: rect.bottom - containerRect.top,
-          left: clampLeft(rect.left - containerRect.left, containerRect),
-        };
+        return placementFor(toAnchor(span.getBoundingClientRect(), containerRect), containerRect);
       }
-      return positionFor(lastPointerRef.current);
+      return placementForSelection(lastPointerRef.current);
     };
 
     const onSelectionChanged = (selected: TextAnnotation[]) => {
@@ -199,8 +219,8 @@ export function useTextAnnotator({
       const isKnown = annotationsRef.current.some((a) => a.id === next.id);
       setPopupState(
         isKnown
-          ? { kind: 'view', annotationId: next.id, position: positionForView(next.id) }
-          : { kind: 'draft', draftId: next.id, position: positionFor(null) },
+          ? { kind: 'view', annotationId: next.id, ...placementForView(next.id) }
+          : { kind: 'draft', draftId: next.id, ...placementForSelection(null) },
       );
     };
 
@@ -289,11 +309,8 @@ export function useTextAnnotator({
     onSetComment(id, comment);
   };
 
-  // The library walks up from the container to guess the scroller; pass the
-  // reader's own so a document that happens not to overflow cannot send it to
-  // the page root instead.
-  const scrollToAnnotation = (id: string, scrollParent?: Element | null) => {
-    annoRef.current?.scrollIntoView(id, scrollParent ?? undefined);
+  const scrollToAnnotation = (id: string) => {
+    annoRef.current?.scrollIntoView(id, scrollRef.current ?? undefined);
   };
 
   return {

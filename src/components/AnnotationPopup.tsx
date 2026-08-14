@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { Highlighter, MessageSquarePlus, Trash2 } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Check, Highlighter, MessageSquarePlus, Trash2, X } from 'lucide-react';
 import type { Annotation } from '../lib/annotations';
+import { placePopup, type PopupSize } from '../lib/popup-position';
 import { NOT_ANNOTATABLE_CLASS, type AnnotationPopupState } from '../lib/use-text-annotator';
 
 interface AnnotationPopupProps {
@@ -12,6 +13,9 @@ interface AnnotationPopupProps {
   onSaveComment: (id: string, comment: string | null) => void;
   onDismiss: () => void;
 }
+
+/** Until the card has been measured; replaced before the browser paints. */
+const UNMEASURED: PopupSize = { width: 0, height: 0 };
 
 export function AnnotationPopup({
   popup,
@@ -29,11 +33,26 @@ export function AnnotationPopup({
   const [draftEditing, setDraftEditing] = useState(false);
   const editing = popup.kind === 'view' || draftEditing;
   const [text, setText] = useState(annotation?.comment ?? '');
+  const cardRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [size, setSize] = useState<PopupSize | null>(null);
 
   useEffect(() => {
     if (editing) textareaRef.current?.focus();
   }, [editing]);
+
+  // Measured rather than declared: the toolbar is only as wide as its two
+  // buttons while the editor is a fixed column, and the card changes height the
+  // moment one gives way to the other. Measuring in a layout effect means the
+  // card is never painted at the position it would have had before.
+  useLayoutEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const next = { width: el.offsetWidth, height: el.offsetHeight };
+    setSize((prev) => (prev && prev.width === next.width && prev.height === next.height ? prev : next));
+  }, [editing]);
+
+  const { top, left } = placePopup(popup.anchor, popup.bounds, size ?? UNMEASURED);
 
   const submit = () => {
     const comment = text.trim();
@@ -47,8 +66,11 @@ export function AnnotationPopup({
     onDismiss();
   };
 
+  // The padding belongs to each state rather than to the card, because the row
+  // of icon buttons carries its own: counted from the icons themselves the
+  // bottom would sit deeper than the top if both were the same number.
   const editor = (
-    <div className="space-y-1">
+    <div className="w-[300px] px-2 pt-2 pb-1">
       <textarea
         ref={textareaRef}
         value={text}
@@ -63,59 +85,93 @@ export function AnnotationPopup({
           }
         }}
         rows={3}
-        placeholder="Write a comment… (Enter to save)"
-        className="w-full resize-none rounded border border-neutral-300 bg-page px-2 py-1 text-[13px] leading-snug outline-none focus:border-amber-500"
+        placeholder="Add a comment…"
+        // `block`, or the textarea sits on the text baseline like the
+        // inline-block it is by default and leaves a line's worth of descender
+        // space under itself — which reads as the button row drifting away.
+        className="block w-full resize-none rounded-lg border border-neutral-300 bg-page px-2.5 py-1.5 text-[13px] leading-snug outline-none focus:border-amber-500"
       />
-      <div className="flex items-center justify-end gap-1">
+      <div className="mt-1 flex items-center">
         {/* Deleting is only ever an option for something that exists, and it
             sits apart from the two buttons that dismiss the popup. */}
         {popup.kind === 'view' && (
-          <button
-            className="mr-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] text-neutral-500 hover:bg-red-50 hover:text-red-600"
+          <IconButton
+            label="Delete"
+            className="text-neutral-400 hover:bg-red-50 hover:text-red-600"
             onClick={() => onDelete(popup.annotationId)}
           >
-            <Trash2 className="h-3 w-3" />
-            Delete
-          </button>
+            <Trash2 className="h-4 w-4" />
+          </IconButton>
         )}
-        <button className="rounded px-2 py-0.5 text-[12px] text-neutral-500 hover:bg-neutral-100" onClick={onDismiss}>
-          Cancel
-        </button>
-        <button
-          className="rounded bg-amber-500 px-2 py-0.5 text-[12px] font-medium text-white hover:bg-amber-600"
-          onClick={submit}
-        >
-          Save
-        </button>
+        <div className="ml-auto flex items-center gap-0.5">
+          <IconButton
+            label="Cancel (Esc)"
+            className="text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+            onClick={onDismiss}
+          >
+            <X className="h-4 w-4" />
+          </IconButton>
+          <IconButton
+            label="Save (Enter)"
+            className="text-amber-500 hover:bg-amber-50 hover:text-amber-600"
+            onClick={submit}
+          >
+            <Check className="h-4 w-4" />
+          </IconButton>
+        </div>
       </div>
     </div>
   );
 
   return (
     <div
-      className={`${NOT_ANNOTATABLE_CLASS} absolute z-20 w-[260px] rounded-md border border-neutral-200 bg-raised p-1.5 shadow-lg`}
-      style={{ top: popup.position.top + 6, left: popup.position.left }}
+      ref={cardRef}
+      className={`${NOT_ANNOTATABLE_CLASS} absolute z-20 rounded-xl border border-neutral-200 bg-raised shadow-xl`}
+      style={{ top, left }}
     >
       {editing ? (
         editor
       ) : (
-        <div className="flex items-center gap-0.5">
-          <button
-            className="flex items-center gap-1 rounded px-2 py-1 text-[13px] text-neutral-700 hover:bg-neutral-100"
-            onClick={onHighlight}
-          >
-            <Highlighter className="h-3.5 w-3.5 text-amber-500" />
-            Highlight
-          </button>
-          <button
-            className="flex items-center gap-1 rounded px-2 py-1 text-[13px] text-neutral-700 hover:bg-neutral-100"
+        <div className="flex items-center gap-0.5 p-2">
+          <ToolbarButton label="Highlight" icon={<Highlighter className="h-4 w-4" />} onClick={onHighlight} />
+          <ToolbarButton
+            label="Annotate"
+            icon={<MessageSquarePlus className="h-4 w-4" />}
             onClick={() => setDraftEditing(true)}
-          >
-            <MessageSquarePlus className="h-3.5 w-3.5 text-amber-500" />
-            Comment
-          </button>
+          />
         </div>
       )}
     </div>
+  );
+}
+
+function ToolbarButton({ label, icon, onClick }: { label: string; icon: ReactNode; onClick: () => void }) {
+  return (
+    <button
+      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] text-neutral-700 hover:bg-neutral-100"
+      onClick={onClick}
+    >
+      <span className="text-amber-500">{icon}</span>
+      {label}
+    </button>
+  );
+}
+
+/** An icon and nothing else, so the name it carries is the only name it has. */
+function IconButton({
+  label,
+  className,
+  onClick,
+  children,
+}: {
+  label: string;
+  className: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button className={`rounded-lg p-1.5 ${className}`} title={label} aria-label={label} onClick={onClick}>
+      {children}
+    </button>
   );
 }

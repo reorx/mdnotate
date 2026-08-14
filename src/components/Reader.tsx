@@ -90,6 +90,7 @@ export function Reader() {
   const annotator = useTextAnnotator({
     enabled: !!content,
     documentKey: docId,
+    scrollRef,
     annotations,
     theme,
     onCreate: createAnnotation,
@@ -171,7 +172,7 @@ export function Reader() {
   };
 
   const jumpToAnnotation = (id: string) => {
-    annotator.scrollToAnnotation(id, scrollRef.current);
+    annotator.scrollToAnnotation(id);
     setPickedAnnotationId(id);
   };
 
