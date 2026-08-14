@@ -7,10 +7,12 @@ import { DEFAULT_PANEL_WIDTHS, panelWidthFromPointer, type PanelSide } from '../
 import { saveSettings } from '../lib/settings';
 import { buildToc, type TocItem } from '../lib/toc';
 import { typographyVars } from '../lib/typography';
+import { useDocSearch } from '../lib/use-doc-search';
 import { useTextAnnotator } from '../lib/use-text-annotator';
 import { AnnotationList } from './AnnotationList';
 import { AnnotationPopup } from './AnnotationPopup';
 import { CommentMarkers } from './CommentMarkers';
+import { FindBar } from './FindBar';
 import { Toc } from './Toc';
 
 /**
@@ -73,6 +75,7 @@ export function Reader() {
   const format = useAppStore((s) => s.doc?.format ?? 'markdown');
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const annotationsOpen = useAppStore((s) => s.annotationsOpen);
+  const view = useAppStore((s) => s.view);
   const annotations = useAppStore((s) => s.annotations);
   const typography = useAppStore((s) => s.settings.typography[format]);
   const panels = useAppStore((s) => s.settings.panels);
@@ -92,6 +95,17 @@ export function Reader() {
     onCreate: createAnnotation,
     onRemove: deleteAnnotation,
     onSetComment: updateComment,
+  });
+
+  // ⌘F is a document-wide listener, so it has to know when the reader is not
+  // the thing on screen: settings and export are laid over it, and a key press
+  // meant for them must not scroll the page behind.
+  const search = useDocSearch({
+    containerRef: annotator.containerRef,
+    scrollRef,
+    content,
+    enabled: !!content && view === 'reader',
+    onTakeSelection: annotator.dismissPopup,
   });
 
   // Collect headings from the rendered DOM: assign slug ids and build the TOC.
@@ -182,52 +196,71 @@ export function Reader() {
           <PanelResizeHandle side="toc" containerRef={rootRef} />
         </>
       )}
-      <div
-        ref={scrollRef}
-        className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
-        style={typographyVars(typography) as CSSProperties}
-      >
-        <div ref={annotator.containerRef} className="prose-column relative mx-auto px-8 py-6">
-          {/* Plain text is shown as it was written — running it through the
-              Markdown renderer would turn a leading # into a heading and
-              collapse the line breaks a log or a config depends on. Either way
-              the annotator sees ordinary rendered text, so highlighting works
-              the same in both. */}
-          {format === 'markdown' ? (
-            <article className="prose-dense">
-              {/* A table cannot wrap below its min-content width, and the
-                  scroller no longer scrolls sideways for it — so a wide table
-                  scrolls inside its own box, like `pre` always has. */}
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  table: ({ node: _node, ...props }) => (
-                    <div className="overflow-x-auto">
-                      <table {...props} />
-                    </div>
-                  ),
-                }}
-              >
-                {content ?? ''}
-              </ReactMarkdown>
-            </article>
-          ) : (
-            <article className="prose-plain">{content ?? ''}</article>
-          )}
-          <CommentMarkers markers={annotator.commentMarkers} onOpen={annotator.openAnnotation} />
-          {popup && (
-            <AnnotationPopup
-              key={popup.kind === 'draft' ? popup.draftId : popup.annotationId}
-              popup={popup}
-              annotation={popupAnnotation}
-              onHighlight={() => annotator.commitDraft(null)}
-              onAnnotate={(comment) => annotator.commitDraft(comment)}
-              onDelete={annotator.deleteAnnotation}
-              onSaveComment={annotator.saveComment}
-              onDismiss={annotator.dismissPopup}
-            />
-          )}
+      {/* A positioned box around the scroller, and nothing else: the find bar
+          has to stay put while the document scrolls under it, which it could
+          not do from inside the scroller. */}
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <div
+          ref={scrollRef}
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+          style={typographyVars(typography) as CSSProperties}
+        >
+          <div ref={annotator.containerRef} className="prose-column relative mx-auto px-8 py-6">
+            {/* Plain text is shown as it was written — running it through the
+                Markdown renderer would turn a leading # into a heading and
+                collapse the line breaks a log or a config depends on. Either way
+                the annotator sees ordinary rendered text, so highlighting works
+                the same in both. */}
+            {format === 'markdown' ? (
+              <article className="prose-dense">
+                {/* A table cannot wrap below its min-content width, and the
+                    scroller no longer scrolls sideways for it — so a wide table
+                    scrolls inside its own box, like `pre` always has. */}
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    table: ({ node: _node, ...props }) => (
+                      <div className="overflow-x-auto">
+                        <table {...props} />
+                      </div>
+                    ),
+                  }}
+                >
+                  {content ?? ''}
+                </ReactMarkdown>
+              </article>
+            ) : (
+              <article className="prose-plain">{content ?? ''}</article>
+            )}
+            <CommentMarkers markers={annotator.commentMarkers} onOpen={annotator.openAnnotation} />
+            {popup && (
+              <AnnotationPopup
+                key={popup.kind === 'draft' ? popup.draftId : popup.annotationId}
+                popup={popup}
+                annotation={popupAnnotation}
+                onHighlight={() => annotator.commitDraft(null)}
+                onAnnotate={(comment) => annotator.commitDraft(comment)}
+                onDelete={annotator.deleteAnnotation}
+                onSaveComment={annotator.saveComment}
+                onDismiss={annotator.dismissPopup}
+              />
+            )}
+          </div>
         </div>
+        {search.open && (
+          <FindBar
+            query={search.query}
+            count={search.count}
+            active={search.active}
+            capped={search.capped}
+            paints={search.paints}
+            inputRef={search.inputRef}
+            onQueryChange={search.setQuery}
+            onComposingChange={search.setComposing}
+            onStep={search.step}
+            onClose={search.close}
+          />
+        )}
       </div>
       {annotationsOpen && (
         <>

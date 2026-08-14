@@ -19,6 +19,7 @@ import { Home } from './components/Home';
 import { Reader } from './components/Reader';
 import { SettingsView } from './components/SettingsView';
 import './App.css';
+import './find-highlight.css';
 
 function App() {
   const doc = useAppStore((s) => s.doc);

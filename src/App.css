@@ -121,6 +121,10 @@
   background: rgb(255 255 255 / 0.22);
 }
 
+/* The search highlights are the one thing not styled here: see
+   `find-highlight.css`, which stays out of this file so Tailwind's Lightning
+   CSS pass does not warn about `::highlight()` on every build. */
+
 /*
  * Dense reading typography. Deliberately tighter than typical prose themes:
  * the app is a reader, so information density beats airiness.

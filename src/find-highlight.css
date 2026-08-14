@@ -1,0 +1,32 @@
+/*
+ * Find in document. Painted by the browser through the CSS Custom Highlight
+ * API — `lib/use-doc-search.ts` hands it the ranges — so there is no element
+ * here to blend, to position, or to keep in step with the scroll.
+ *
+ * Blue, because amber is what a highlight the reader made looks like, and the
+ * two are regularly on screen together. Written out twice rather than through
+ * a `--find-*` variable: whether a highlight pseudo-element inherits custom
+ * properties from the text it covers is the one thing about this API browsers
+ * have not agreed on, and there is nothing to gain by betting on it.
+ *
+ * A file of its own, and not part of App.css, for one dull reason: the
+ * Lightning CSS pass Tailwind runs over its own output does not know
+ * `::highlight()`. It passes the rules through untouched but warns about all
+ * four of them on every single build, and a build that cries wolf is worse
+ * than a second stylesheet.
+ */
+
+::highlight(mdnotate-find) {
+  background-color: rgb(59 130 246 / 0.25);
+}
+::highlight(mdnotate-find-active) {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+.dark ::highlight(mdnotate-find) {
+  background-color: rgb(96 165 250 / 0.32);
+}
+.dark ::highlight(mdnotate-find-active) {
+  background-color: #3b82f6;
+}
