@@ -25,6 +25,12 @@ export interface OpenDoc {
   format: DocFormat;
   /** Hash of `content`. Annotations stored under any other hash were made on text that has since changed. */
   contentHash: string;
+  /**
+   * When the file this text came from was last written, in epoch milliseconds.
+   * Absent for anything with no file behind it — remote documents, clipboard
+   * text — and for a filesystem that does not record one.
+   */
+  modifiedAt?: number;
 }
 
 /** A document as the entry points build it, before `open-doc` stamps its hash. */

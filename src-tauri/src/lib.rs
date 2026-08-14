@@ -394,6 +394,16 @@ fn open_argument(app: &AppHandle, arg: &str, cwd: &Path) {
 struct LocalFile {
     path: String,
     content: String,
+    /// Last written, in milliseconds since the epoch. `None` where the platform
+    /// or the filesystem does not record one — the reader simply says less.
+    modified: Option<u64>,
+}
+
+/// When a file was last written, as the front end counts time.
+fn modified_millis(path: &Path) -> Option<u64> {
+    let time = std::fs::metadata(path).ok()?.modified().ok()?;
+    let since_epoch = time.duration_since(std::time::UNIX_EPOCH).ok()?;
+    Some(since_epoch.as_millis() as u64)
 }
 
 /// Read a local file, answering with its canonical path as well as its text.
@@ -401,15 +411,21 @@ struct LocalFile {
 /// Identity follows the resolved path so that one document is one recents entry
 /// however it was named: `/tmp/a.md` and `/private/tmp/a.md` are the same file,
 /// and only the paths the OS hands us arrive canonical already.
+///
+/// The modification time is read here rather than when it comes to be shown, so
+/// that what the reader is told is the age of the text in front of them and not
+/// of some later edit they have yet to see.
 #[tauri::command]
 fn read_local_file(path: String) -> Result<LocalFile, String> {
     let content = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read {path}: {e}"))?;
     let canonical = Path::new(&path)
         .canonicalize()
         .unwrap_or_else(|_| PathBuf::from(&path));
+    let modified = modified_millis(&canonical);
     Ok(LocalFile {
         path: canonical.to_string_lossy().into_owned(),
         content,
+        modified,
     })
 }
 
@@ -594,7 +610,35 @@ fn start_window_drag(window: tauri::Window) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{choose_target, Target, WindowState};
+    use super::{choose_target, modified_millis, Target, WindowState};
+
+    /// The unit is the thing worth pinning down: seconds where milliseconds were
+    /// meant would read back as a date in 1970 without failing anywhere.
+    #[test]
+    fn modification_time_is_in_milliseconds_since_the_epoch() {
+        let path = std::env::temp_dir().join("mdnotate-modified-millis-test.md");
+        std::fs::write(&path, "hello").expect("could not write the test file");
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        let modified = modified_millis(&path).expect("a file just written has a modification time");
+
+        assert!(
+            modified.abs_diff(now) < 60_000,
+            "a file written a moment ago reported {modified}, against a clock reading {now}"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_file_that_is_not_there_has_no_modification_time() {
+        assert_eq!(
+            modified_millis(std::path::Path::new("/nonexistent/mdnotate/never.md")),
+            None
+        );
+    }
 
     fn window(label: &str, doc_id: Option<&str>) -> WindowState {
         WindowState {

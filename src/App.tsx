@@ -14,6 +14,7 @@ import {
   watchSystemTheme,
 } from './lib/theme';
 import { useAppStore, type View } from './store';
+import { DocTitle } from './components/DocTitle';
 import { ExportView } from './components/ExportView';
 import { Home } from './components/Home';
 import { Reader } from './components/Reader';
@@ -85,9 +86,13 @@ function App() {
 
   return (
     <div className="flex h-screen flex-col bg-page text-neutral-900">
+      {/* `z-30`, because the document-info panel hangs out of the header and
+          into the row below it. Both that row and the header are positioned
+          with no z-index of their own, so without this the later sibling — the
+          reader — paints over anything reaching down into it. */}
       <header
         data-tauri-drag-region
-        className={`relative flex h-9 shrink-0 items-center gap-1.5 border-b border-neutral-200 px-2 ${isTauri ? 'pl-[72px]' : ''}`}
+        className={`relative z-30 flex h-9 shrink-0 items-center gap-1.5 border-b border-neutral-200 px-2 ${isTauri ? 'pl-[72px]' : ''}`}
       >
         <button
           className="rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
@@ -105,20 +110,7 @@ function App() {
         >
           <House className="h-4 w-4" />
         </button>
-        {doc && (
-          // Centred on the window rather than on the space left by the two
-          // button groups, which are not the same width; `pointer-events-none`
-          // on the wrapper keeps the gaps around it draggable.
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <span
-              data-tauri-drag-region
-              className="pointer-events-auto max-w-[45%] truncate text-[13px] font-medium text-neutral-700"
-              title={doc.source}
-            >
-              {doc.title}
-            </span>
-          </div>
-        )}
+        {doc && <DocTitle doc={doc} />}
         {opening && (
           <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-neutral-500" title={opening}>
             <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />

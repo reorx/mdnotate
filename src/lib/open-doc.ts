@@ -93,13 +93,19 @@ async function open(doc: NewDoc, attempt: number): Promise<void> {
  * name one file, and one file should not become two recents entries — each
  * with its own annotations — depending on which door it came in by.
  */
-async function readLocator(locator: Locator): Promise<{ locator: Locator; content: string }> {
+async function readLocator(locator: Locator): Promise<{ locator: Locator; content: string; modifiedAt?: number }> {
   if (locator.kind !== 'file') {
     const content = await invoke<string>('read_remote_file', { host: locator.host, path: locator.path });
     return { locator, content };
   }
-  const file = await invoke<{ path: string; content: string }>('read_local_file', { path: locator.path });
-  return { locator: { ...locator, path: file.path }, content: file.content };
+  const file = await invoke<{ path: string; content: string; modified: number | null }>('read_local_file', {
+    path: locator.path,
+  });
+  return {
+    locator: { ...locator, path: file.path },
+    content: file.content,
+    modifiedAt: file.modified ?? undefined,
+  };
 }
 
 /**
@@ -122,6 +128,7 @@ export async function openLocator(locator: Locator): Promise<void> {
         source: formatLocator(found.locator),
         content: found.content,
         format: found.locator.format,
+        modifiedAt: found.modifiedAt,
       },
       attempt,
     );

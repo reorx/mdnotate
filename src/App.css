@@ -43,7 +43,6 @@
   --prose-table-head-bg: #f7f7f6;
   --prose-link: #b45309;
   --prose-hr: #e5e5e3;
-  --prose-selection: rgb(245 158 11 / 0.25);
 }
 
 /*
@@ -101,7 +100,6 @@
   --prose-table-head-bg: #2a2a2c;
   --prose-link: #fbbf24;
   --prose-hr: #3a3a3c;
-  --prose-selection: rgb(245 158 11 / 0.32);
 }
 
 /*
@@ -114,11 +112,27 @@
   mix-blend-mode: screen;
 }
 
-/* The library ships a global `::selection` of 18%-opacity blue, which all but
-   disappears on a dark background. Prose overrides it below; this is for the
-   text outside the reader. */
-.dark ::selection {
-  background: rgb(255 255 255 / 0.22);
+/*
+ * Selection, in the colour the platform selects things in.
+ *
+ * The library ships a global `::selection`, and a `::selection` cannot be unset
+ * back to what the browser would have painted, so the only way out is to paint
+ * something else. `Highlight` and `HighlightText` are that something: the
+ * system's own selection colours, which follow the accent colour the user
+ * picked and the `color-scheme` `lib/theme.ts` sets, and which are guaranteed
+ * to be legible against one another.
+ *
+ * It used to be amber, which is the trouble: amber is what an annotation looks
+ * like, and dragging a selection across one made it impossible to see where the
+ * highlight ended and the selection began.
+ *
+ * The `html` is for weight alone. Both this and the library's `*::selection`
+ * score (0,0,1), so without it the winner would be decided by which stylesheet
+ * the bundler happened to emit second.
+ */
+html ::selection {
+  background: Highlight;
+  color: HighlightText;
 }
 
 /* The search highlights are the one thing not styled here: see
@@ -266,10 +280,6 @@
   margin: 1.2em 0;
 }
 
-.prose-dense ::selection {
-  background: var(--prose-selection);
-}
-
 /* Plain text: shown as written, wrapped so long lines stay readable without a
    horizontal scrollbar. Monospace because the formats that land here — logs,
    config, CSV — are the ones whose columns line up. */
@@ -282,8 +292,4 @@
   white-space: pre-wrap;
   overflow-wrap: break-word;
   tab-size: 4;
-}
-
-.prose-plain ::selection {
-  background: var(--prose-selection);
 }

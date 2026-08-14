@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
-import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { ArrowLeft, Check, Copy } from 'lucide-react';
 import { annotationsToMarkdown } from '../lib/annotations';
-import { isTauri } from '../lib/tauri-env';
+import { writeClipboardText } from '../lib/clipboard';
 import { renderTemplate } from '../lib/template';
 import { useAppStore } from '../store';
 
@@ -24,8 +23,7 @@ export function ExportView() {
   );
 
   const copy = async () => {
-    if (isTauri) await writeText(output);
-    else await navigator.clipboard.writeText(output);
+    await writeClipboardText(output);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
