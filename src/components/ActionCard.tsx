@@ -30,6 +30,13 @@ export function ActionCard({
   );
 }
 
+/**
+ * A text box on a card. Layout is left to the call site — the boxes sit in
+ * rows of varying make-up — so this is only what they look like.
+ */
+export const CARD_INPUT =
+  'min-w-0 rounded border border-neutral-300 bg-page px-2 py-1 text-[12px] text-neutral-700 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none';
+
 /** A secondary line under an ActionCard's label. */
 export function CardNote({
   tone = 'muted',

@@ -13,7 +13,9 @@ import { RecentList } from './RecentList';
 export function Home() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-[36rem] flex-col gap-3 px-8 py-8">
+      {/* Wide enough for the prefix and suffix boxes to sit side by side and
+          still each show a path's worth of text. */}
+      <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-3 px-8 py-8">
         <OpenFileCard />
         <ClipboardCard />
         <RecentList />

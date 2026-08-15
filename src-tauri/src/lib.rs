@@ -68,6 +68,21 @@ fn migrations() -> Vec<Migration> {
                   CREATE INDEX idx_annotations_doc_id ON annotations (doc_id);",
             kind: MigrationKind::Up,
         },
+        // The leading half of a path — nearly always a directory — offered back
+        // for completion the next time one is typed. The prefix is its own key,
+        // so using one again lifts it rather than storing it twice. Nothing
+        // here refers to a document: a directory outlives the documents in it,
+        // and outliving the recents list is the point.
+        Migration {
+            version: 3,
+            description: "create_path_prefixes",
+            sql: "CREATE TABLE path_prefixes (
+                      prefix  TEXT PRIMARY KEY,
+                      used_at INTEGER NOT NULL
+                  );
+                  CREATE INDEX idx_path_prefixes_used_at ON path_prefixes (used_at DESC);",
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

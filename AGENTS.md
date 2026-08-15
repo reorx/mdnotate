@@ -21,13 +21,15 @@ src/lib/          纯逻辑 + hook：annotations（数据模型、失效判定�
                   open-doc（打开文档的唯一入口）、annotate（改动标注的唯一入口）、
                   window-doc（本窗口装着哪个文档，向 Rust 汇报 + 写窗口标题）、
                   path-input（手输/粘贴路径的归一化规则）、
+                  path-prefix（prefix+suffix 的拼接与补全匹配，纯规则）、path-prefixes-db（记住的 prefix 的 IO）、
                   doc-locator（本地/ssh/链接的语法与格式判定，纯逻辑）、
                   doc-info（文档度量：字符数 / 字节数 / 修改时间的文案）、
                   clipboard、use-text-annotator（recogito 封装）、
                   use-select-all（⌘A 选中范围）、settings、theme（偏好解析与落地）、
                   default-app、tauri-env、sample-doc
-src/components/   Home（首页）、OpenFileCard、ClipboardCard、RecentList、DefaultAppCard、
-                  ActionCard（首页三张卡片共用的壳 + CardNote/CardButton）、
+src/components/   Home（首页）、OpenFileCard、PrefixCombobox（prefix 输入框 + 补全下拉）、
+                  ClipboardCard、RecentList、DefaultAppCard、
+                  ActionCard（首页卡片共用的壳 + CardNote/CardButton/CARD_INPUT）、
                   Reader（Markdown + 目录 + 标注容器）、Toc、AnnotationList、AnnotationPopup、
                   CommentMarkers（正文里的评论图标层）、StatusBar（正文底部状态栏）、
                   ExportView、SettingsView
@@ -99,7 +101,9 @@ pnpm build:signed  # scripts/build-signed.sh：构建 + Developer ID 签名 + �
 - **`sql:allow-execute` 不在 `sql:default` 里**，capabilities 必须单独加，漏了要到第一次写入才报错。
 - **migration 的 SQL 文本是被 checksum 的**：sqlx 对每条已应用的 migration 存 sha384，源码里改动 SQL 字符串（**包括缩进**）会让 `Database.load` 直接失败，整个前端从此读不到库。所以 `migrations()` 里旧条目的字符串是冻结的，只能往后追加新 version。`src/lib/db.ts` 是唯一的连接（`Database.load` 每次调用都会新开一个 pool，且 migration 只在首次 load 跑）。
 - **剪切板探测**：没有剪切板变化事件，`ClipboardCard` 在挂载时和 window focus 时各读一次（focus 正是用户从别处复制完回来的时刻）。读不到与空剪切板等同处理。内容必须**多于 `MIN_CLIPBOARD_CHARS`（200）字符**才算可读文档（`describeClipboard` 返回 `too-short`，按钮禁用、不显示预览）——复制一个词/一条 URL 不该点亮卡片。
-- **路径输入框**：`OpenFileCard` 里除了系统对话框还有一个手输/粘贴的入口，接受绝对路径、`host:path` 和整条 `mdnotate://` 链接。路径永远不按空格切分，只 trim 两端；**`path-input.ts` 只负责脱掉"方言"外衣**：终端拖拽的 `\ ` 转义、外层单/双引号（引号内的反斜杠按 shell 语义保持字面）、`file://` URL（百分号解码，坏转义原样保留）；`mdnotate://` 链接原样放行，交给 `doc-locator` 按 URL 语义解码。**它意味着什么则全在 `doc-locator.ts`**——原先的 `pathInputError` 已并入 `parseLocator`，不要再造第二个校验器。`~` 仍由 `expandHome` 处理，`needsHome()` 决定要不要花一次 IPC 去问 `homeDir()`；远端路径里的 `~/` 是被剥掉而不是展开的（路径进远端 shell 前会被单引号包住，`~` 不会展开）。
+- **路径输入框**：`OpenFileCard` 里除了系统对话框还有两个手输/粘贴的入口（见下条），都接受绝对路径、`host:path` 和整条 `mdnotate://` 链接。路径永远不按空格切分，只 trim 两端；**`path-input.ts` 只负责脱掉"方言"外衣**：终端拖拽的 `\ ` 转义、外层单/双引号（引号内的反斜杠按 shell 语义保持字面）、`file://` URL（百分号解码，坏转义原样保留）；`mdnotate://` 链接原样放行，交给 `doc-locator` 按 URL 语义解码。**它意味着什么则全在 `doc-locator.ts`**——原先的 `pathInputError` 已并入 `parseLocator`，不要再造第二个校验器。`~` 仍由 `expandHome` 处理，`needsHome()` 决定要不要花一次 IPC 去问 `homeDir()`；远端路径里的 `~/` 是被剥掉而不是展开的（路径进远端 shell 前会被单引号包住，`~` 不会展开）。
+- **prefix + suffix 打开**：整条路径输入框下面还有一行，左边是记着用过的 prefix 的补全框（`PrefixCombobox`），右边是文件名。拼接规则在 `path-prefix.ts` 的 `joinPrefixSuffix`（纯逻辑，有测试）：**两半之间补一个 `/`**，除非 prefix 已经以 `/` 结尾、suffix 以 `/` 开头，或者——这条是会静默开错文件的那个——**prefix 以 `:` 结尾**：`host:path` 是相对远端 home 的，`host:/path` 是远端根目录，冒号后多一个斜杠就换了个文件且不报错。拼出来的东西照常喂给 `openSpec()`，**这里没有第二套语法**。补全是**不分大小写的子串匹配**而不是前缀匹配（存下来的 prefix 都以 `~/` 或 `/` 或主机名开头，没人想为了找它把这几个字符再打一遍），以输入开头的那些排在前面；prefix 为空时 focus 就列出最近用过的几条。**只有真的打开成功了才 `recordPrefix`** —— 打不开的路径不该赖在补全列表里；成功后清空 suffix 但**留着 prefix**，同一个目录下的下一篇就是这么开的。卡片下面那行拼接预览不是装饰：自动补的斜杠落在哪，只有它看得见。
+- **`path_prefixes` 表**：和 `annotations` 相反，**故意不挂外键**。一个目录比它装着的任何一篇文档都活得久，而 Recent 的 50 条裁剪会级联销毁 annotations —— 让它也跟着被裁掉就等于「读满 50 篇文档之后补全列表被清空」。prefix 文本自己当主键，所以「用过就浮到最前」就是一条 `ON CONFLICT(prefix) DO UPDATE SET used_at`，上限同样 50 条。
 - **标注持久化**：`annotations` 表，`doc_id` 外键指向 `recent_docs.id` 且 `ON DELETE CASCADE`（sqlx 默认开 `PRAGMA foreign_keys`，级联真的会触发）。**代价是 Recent 的 50 条裁剪会连带销毁标注**，这是明确选择的行为。改标注走 `src/lib/annotate.ts` 这一个漏斗：先写 store 后写库，写库失败只出 banner。写入用 `ON CONFLICT(id) DO UPDATE` 只更新 comment/updated_at —— quote 与偏移在提交那一刻就固定了。
 - **标注失效判定**：每条标注存一份创建时的 `doc_hash`（`hashText(content)`）。偏移是渲染文本的字符偏移，文件在外部被改过就会全部错位，而 recogito 的 `reviveTextSelector` 只按偏移数文本节点、**不校验 quote**，会静默高亮到错的句子。所以打开时 hash 不匹配的直接删除并提示丢弃条数（纯规则在 `annotations.ts` 的 `splitStaleAnnotations`，有测试）。剪切板文档的 id 本身就是内容 hash，天然永远匹配。
 - **标注必须与文档同时进 store**：`use-text-annotator` 只在 effect 创建时 `setAnnotations` 一次（deps 只有 `enabled`/`documentKey`），异步晚到的标注不会被渲染，所以 `openDoc(doc, annotations)` 是一次性写入的。
