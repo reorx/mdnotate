@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAppStore } from '../store';
@@ -8,11 +8,13 @@ import { saveSettings } from '../lib/settings';
 import { buildToc, type TocItem } from '../lib/toc';
 import { typographyVars } from '../lib/typography';
 import { useDocSearch } from '../lib/use-doc-search';
+import { useSelectAll } from '../lib/use-select-all';
 import { useTextAnnotator } from '../lib/use-text-annotator';
 import { AnnotationList } from './AnnotationList';
 import { AnnotationPopup } from './AnnotationPopup';
 import { CommentMarkers } from './CommentMarkers';
 import { FindBar } from './FindBar';
+import { StatusBar } from './StatusBar';
 import { Toc } from './Toc';
 
 /**
@@ -69,9 +71,28 @@ function PanelResizeHandle({
   );
 }
 
+/**
+ * A side panel's contents while there may be nothing for them to point at.
+ *
+ * Both panels navigate the rendered document — headings to scroll to,
+ * highlights to jump to — and source view has neither. They stay on screen, so
+ * the structure and the annotations are still readable, but go quiet: `inert`
+ * takes the clicks, the hover and the tab stops away in one attribute, and
+ * because it takes the pointer events with them the panel around it still
+ * scrolls.
+ */
+function PanelContent({ inert, children }: { inert: boolean; children: ReactNode }) {
+  return (
+    <div inert={inert} className={inert ? 'opacity-50' : undefined}>
+      {children}
+    </div>
+  );
+}
+
 export function Reader() {
   const content = useAppStore((s) => s.doc?.content ?? null);
   const docId = useAppStore((s) => s.doc?.id ?? null);
+  const contentHash = useAppStore((s) => s.doc?.contentHash ?? null);
   const format = useAppStore((s) => s.doc?.format ?? 'markdown');
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const annotationsOpen = useAppStore((s) => s.annotationsOpen);
@@ -83,12 +104,24 @@ export function Reader() {
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const articleRef = useRef<HTMLElement | null>(null);
   const [toc, setToc] = useState<TocItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pickedAnnotationId, setPickedAnnotationId] = useState<string | null>(null);
+  // Reading the Markdown behind the page is a look, not a mode to live in: it
+  // belongs to this document, in this window, and the next document opens
+  // rendered as always.
+  const [sourceView, setSourceView] = useState(false);
+  const showingSource = sourceView && format === 'markdown';
+
+  useEffect(() => setSourceView(false), [docId]);
 
   const annotator = useTextAnnotator({
-    enabled: !!content,
+    // Source view drops the annotator entirely, which is what makes selecting
+    // text there an ordinary selection again: no draft, no popup, no
+    // highlights. Switching back rebuilds it from the store, annotations and
+    // all — their offsets were only ever measured against the rendered text.
+    enabled: !!content && !showingSource,
     documentKey: docId,
     scrollRef,
     annotations,
@@ -104,13 +137,17 @@ export function Reader() {
   const search = useDocSearch({
     containerRef: annotator.containerRef,
     scrollRef,
-    content,
+    revision: `${docId}#${contentHash}#${showingSource}`,
     enabled: !!content && view === 'reader',
     onTakeSelection: annotator.dismissPopup,
   });
 
+  useSelectAll({ targetRef: articleRef, enabled: !!content && view === 'reader' });
+
   // Collect headings from the rendered DOM: assign slug ids and build the TOC.
-  // DOM-derived so ids always match what the sidebar links to.
+  // DOM-derived so ids always match what the sidebar links to — which is why
+  // the view mode belongs in the dependencies: coming back from source view
+  // rebuilds the headings as new elements, and new elements carry no ids.
   useEffect(() => {
     const container = annotator.containerRef.current;
     if (!container || !content) {
@@ -118,6 +155,9 @@ export function Reader() {
       setActiveId(null);
       return;
     }
+    // Nothing to collect from source view, and nothing to throw away either:
+    // the list is kept, greyed out, until the headings come back.
+    if (showingSource) return;
     const headingEls = Array.from(container.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6'));
     const items = buildToc(
       headingEls.map((el) => ({
@@ -130,13 +170,15 @@ export function Reader() {
     });
     setToc(items);
     setActiveId(items[0]?.id ?? null);
-  }, [content, annotator.containerRef]);
+  }, [content, showingSource, annotator.containerRef]);
 
   // Scroll spy: the active heading is the last one at or above the viewport top.
+  // Off in source view, where every heading lookup misses and the first entry
+  // would light up for the whole document.
   useEffect(() => {
     const scroller = scrollRef.current;
     const container = annotator.containerRef.current;
-    if (!scroller || !container || toc.length === 0) return;
+    if (!scroller || !container || toc.length === 0 || showingSource) return;
 
     const onScroll = () => {
       // At the very bottom the last headings can never reach the viewport
@@ -162,7 +204,7 @@ export function Reader() {
     onScroll();
     scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => scroller.removeEventListener('scroll', onScroll);
-  }, [toc, annotator.containerRef]);
+  }, [toc, showingSource, annotator.containerRef]);
 
   const jumpTo = (id: string) => {
     const container = annotator.containerRef.current;
@@ -192,7 +234,9 @@ export function Reader() {
       {sidebarOpen && (
         <>
           <aside className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50" style={{ width: panels.toc }}>
-            <Toc items={toc} activeId={activeId} onJump={jumpTo} />
+            <PanelContent inert={showingSource}>
+              <Toc items={toc} activeId={activeId} onJump={jumpTo} />
+            </PanelContent>
           </aside>
           <PanelResizeHandle side="toc" containerRef={rootRef} />
         </>
@@ -201,19 +245,24 @@ export function Reader() {
           has to stay put while the document scrolls under it, which it could
           not do from inside the scroller. */}
       <div className="relative flex min-w-0 flex-1 flex-col">
+        {/* Focusable, and the only thing here that is: a click on the prose has
+            to land somewhere for ⌘A to mean this document rather than this
+            window — and, incidentally, for the space bar and the arrow keys to
+            scroll it at all. */}
         <div
           ref={scrollRef}
-          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+          tabIndex={-1}
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto outline-none"
           style={typographyVars(typography) as CSSProperties}
         >
           <div ref={annotator.containerRef} className="prose-column relative mx-auto px-8 py-6">
-            {/* Plain text is shown as it was written — running it through the
-                Markdown renderer would turn a leading # into a heading and
-                collapse the line breaks a log or a config depends on. Either way
-                the annotator sees ordinary rendered text, so highlighting works
-                the same in both. */}
-            {format === 'markdown' ? (
-              <article className="prose-dense">
+            {/* Two things end up here as text shown exactly as written: a plain
+                document, and the Markdown behind a rendered one. Running either
+                through the Markdown renderer would turn a leading # into a
+                heading, and collapse the line breaks that a log, or a source
+                listing, depends on. */}
+            {format === 'markdown' && !showingSource ? (
+              <article ref={articleRef} className="prose-dense">
                 {/* A table cannot wrap below its min-content width, and the
                     scroller no longer scrolls sideways for it — so a wide table
                     scrolls inside its own box, like `pre` always has. */}
@@ -231,7 +280,9 @@ export function Reader() {
                 </ReactMarkdown>
               </article>
             ) : (
-              <article className="prose-plain">{content ?? ''}</article>
+              <article ref={articleRef} className="prose-plain">
+                {content ?? ''}
+              </article>
             )}
             <CommentMarkers markers={annotator.commentMarkers} onOpen={annotator.openAnnotation} />
             {popup && (
@@ -262,12 +313,22 @@ export function Reader() {
             onClose={search.close}
           />
         )}
+        {content !== null && (
+          <StatusBar
+            content={content}
+            format={format}
+            showingSource={showingSource}
+            onToggleSource={() => setSourceView((showing) => !showing)}
+          />
+        )}
       </div>
       {annotationsOpen && (
         <>
           <PanelResizeHandle side="annotations" containerRef={rootRef} />
           <aside className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50" style={{ width: panels.annotations }}>
-            <AnnotationList annotations={annotations} activeId={activeAnnotationId} onJump={jumpToAnnotation} />
+            <PanelContent inert={showingSource}>
+              <AnnotationList annotations={annotations} activeId={activeAnnotationId} onJump={jumpToAnnotation} />
+            </PanelContent>
           </aside>
         </>
       )}

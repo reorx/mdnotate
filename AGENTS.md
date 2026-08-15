@@ -21,12 +21,15 @@ src/lib/          纯逻辑 + hook：annotations（数据模型、失效判定�
                   window-doc（本窗口装着哪个文档，向 Rust 汇报 + 写窗口标题）、
                   path-input（手输/粘贴路径的归一化规则）、
                   doc-locator（本地/ssh/链接的语法与格式判定，纯逻辑）、
-                  clipboard、use-text-annotator（recogito 封装）、settings、theme（偏好解析与落地）、
+                  doc-info（文档度量：字符数 / 字节数 / 修改时间的文案）、
+                  clipboard、use-text-annotator（recogito 封装）、
+                  use-select-all（⌘A 选中范围）、settings、theme（偏好解析与落地）、
                   default-app、tauri-env、sample-doc
 src/components/   Home（首页）、OpenFileCard、ClipboardCard、RecentList、DefaultAppCard、
                   ActionCard（首页三张卡片共用的壳 + CardNote/CardButton）、
                   Reader（Markdown + 目录 + 标注容器）、Toc、AnnotationList、AnnotationPopup、
-                  CommentMarkers（正文里的评论图标层）、ExportView、SettingsView
+                  CommentMarkers（正文里的评论图标层）、StatusBar（正文底部状态栏）、
+                  ExportView、SettingsView
 src/store.ts      zustand 全局状态
 src-tauri/src/    lib.rs（文件打开路由 + 多窗口路由 + commands + SQLite migration，
                   含 choose_target 的 #[cfg(test)] 单测）、
@@ -81,6 +84,10 @@ pnpm build:signed  # scripts/build-signed.sh：构建 + Developer ID 签名 + �
 - **⌘F 搜索一个 DOM 节点都不改**：命中不是插 `<mark>`、也不是自绘矩形层，而是把 `Range` 交给 **CSS Custom Highlight API**（`CSS.highlights.set(name, new Highlight(...ranges))` + `find-highlight.css` 里的 `::highlight()`）。插元素会动到标注赖以定位的渲染文本，自绘矩形要在每个滚动帧重算 —— 这条路两样都不用，滚动 / resize / 改字号全部白捡。代价是需要 Safari 17.2+（macOS 14.2+），`PAINTS` 特性检测不到时保留计数与跳转、只是不涂色（`FindBar` 会亮一个警告图标）。**当前命中是从「全部命中」那个 Highlight 里剔掉、单独放进第二个**，不靠 `Highlight.priority` 分层 —— 少赌一条浏览器实现细节，也不会出现半透明蓝叠实心蓝的脏色。**`::highlight()` 的规则必须待在 `find-highlight.css` 而不是 `App.css`**：Tailwind 对自己产物跑的那趟 Lightning CSS 不认识这个伪元素，规则会原样透传但每次构建刷四条警告。同理不要给它用 `--find-*` 变量 —— highlight 伪元素继不继承自定义属性是这个 API 各家唯一没谈拢的地方，深浅两套直接写字面值 + `.dark` 覆盖。
 - **搜索匹配跑在「规范化文本」上，不是 DOM 原文**：`search.ts` 把文本节点折成一条 `text` —— 连续空白折成单个空格、**块边界写一个 `\n`** —— 并给每个规范化字符记下它代表的原始 `starts`/`ends`。两条规则各解决一个问题：①markdown 段内软换行在 DOM 里是真实的 `\n`，不折叠就搜不到 `quick brown`；②相邻两个块之间**一个分隔字符都没有**（React 不产生空白文本节点），不插哨兵就会把 `…fox` 和 `bar…` 连起来误命中 `foxbar`。query 同样只折叠不 trim（前导空格是用户要找的东西的一部分），折叠后绝不含 `\n`，所以天然跨不过块边界。大小写折叠**逐字符做且校验长度不变** —— `'İ'.toLowerCase()` 是两个 code unit，整串 `toLowerCase()` 会让它之后的偏移集体错位、高亮到别的句子。纯逻辑全在 `search.ts`（有测试），DOM 那半在 `use-doc-search.ts`：TreeWalker 按 recogito 同一条 `.not-annotatable` 规则收集段表（我们自己的评论图标层和弹窗就在同一个容器里），命中靠二分段表转 `Range`；**不用库的 `reviveTextSelector`**，它每次都从容器头部重走一遍树，几百个命中就是 O(n²)。「从当前视口往下的第一个命中」也是二分（文档流里 `top` 单调不减），一次 layout 读一个 probe。索引**在第一次搜索时才建**，换文档置空 —— 八兆的日志不该让一个从不搜索的读者付这笔钱；命中数封顶 `MAX_MATCHES`（5000），计数显示 `5000+`。
 - **搜索栏必须在滚动容器外面**：`Reader` 给 scroller 套了一层 `relative flex-col` 专门装 `FindBar`，放进滚动容器里它会跟着正文滚走。⌘F 是 document 级监听，所以要靠 `enabled`（`view === 'reader'`）判断阅读器是不是真的在最上面 —— export / settings 盖着的时候按 ⌘F 不该滚动背后的页面。焦点在 `<textarea>`（标注评论框）里时 ⌘F 与 Esc 一律让路：那里的半截评论不是我们该丢的。**只有真的取走了正文选区才 `dismissPopup()`** —— 划词会立刻建一个标注 draft，⌘F 把它拿去当搜索词就等于放弃那个 draft；但没选区的 ⌘F 不该顺手清掉别人正在写的评论。
+- **⌘A 必须自己实现，且必须在 capture 阶段**：`lib/use-select-all.ts`。两件事要一起解决 —— 浏览器原生的 select all 会连目录、标注列表、工具栏一起选走（复制下来全是垃圾）；而**库自己也绑了 ⌘A**（`text-annotator.es.js` 里 `be = "⌘+a"`，回调等下一个 `selectionchange` 再 100ms 后把整篇选区加成一条 annotation 并选中它），也就是按一下 ⌘A 会弹出「要不要把整篇文档高亮」的 draft 弹窗。库用 hotkeys-js 注册在 document 的**冒泡**阶段，所以我们在 **capture** 阶段拦、`stopImmediatePropagation()` 把这个键整个拿走。`preventDefault()` 是**另一个决定**：只有阅读器在最上面时才归我们（overlay 盖着时只掐库、不拦默认，原生 select all 照常在覆盖层里工作 —— 背后的 Reader 是 `inert`，按规范不可被选中）。焦点在 input/textarea 里则完全放行（hotkeys-js 默认也会跳过这些 target，所以库那边同样不会触发）。选区目标是 `<article>` 而不是 annotator 容器：后者还装着评论图标层和弹窗。**残留**：⌘A 之后库内部仍留着一个「待提交选区」，此时右键会把它提交成整篇高亮 —— 与「鼠标划一段再右键」是同一条既有路径，明确接受。
+- **点正文要能拿到焦点**：滚动容器带 `tabIndex={-1}` + `outline-none`。recogito 本来就会给标注容器打 `tabindex="-1"`，但源码视图下 annotator 是销毁的，所以这一份必须是我们自己的。顺带的好处是空格 / PageDown / 方向键这才滚得动正文（在此之前整个正文区没有任何可聚焦元素，键盘根本滚不动）。
+- **源码视图**：状态栏最右的眼睛按钮，`Reader` 的局部 state（换文档重置回渲染视图，不进 settings —— 看一眼源码不该变成下一篇文档的默认阅读方式），纯文本文档不显示这个按钮（渲染视图本来就是原文）。切过去就是把 annotator `enabled` 翻成 false，整个销毁：划词不再建 draft、高亮和评论图标一起消失；切回来 `setAnnotations` 从 store 重建。**三个必须跟着视图模式走的依赖，漏一个就是静默 bug**：① `useDocSearch` 的 `revision`（原来叫 `content`）—— 搜索索引缓存的是**真实 DOM Text 节点**，切视图 content 没变但节点全换了，只按 content 重置会让搜索指向已经不在文档里的节点；② 建 TOC 的 effect —— heading id 是扫渲染后的 DOM 打上去的，切回来 heading 是**全新元素、没有 id**，不重跑就再也跳不动；③ 滚动 spy —— 源码视图下每次 heading 查找都落空，会把 TOC 第一条一直点亮。两个侧栏在源码视图下包一层 `inert` + `opacity-50`（`PanelContent`）：点击天然无效，而 `inert` 连带的 `pointer-events` 穿透让侧栏自己还能滚。
+- **状态栏**：`StatusBar` 在正文列底部、**滚动容器外面**（和 `FindBar` 同一层 `flex-col`）。字数与体积复用 `doc-info.ts` 的 `docStats()` —— 和标题栏信息浮层是同一个口径、同一处定义；`useMemo` 按 content 缓存，八兆的文档不该每次 render 都数两遍。复制按钮复制的是 `doc.content` 原文。
 - **recogito 约束**：必须 `renderer: 'SPANS'`；库在鼠标松开时立即创建 draft，未提交的 draft 要在选区移动/外部点击/dismiss 时删除；`popupRef` 与 `setPopup` 同步写入；弹窗需带 `not-annotatable` class。view 弹窗用 `[data-annotation]` overlay span 的 rect 定位。`setSelected(id)` 走的是同一条 `selectionChanged`，所以程序化打开弹窗和点高亮是同一条路径。
 - **标注数据模型**：highlight 与 comment 是同一结构，`comment === null` 即纯高亮；UI 区分，数据层不区分。锚点是渲染文本的字符偏移（`start`/`end` + `quote`）。
 - **导出是两层模板**：外层 `settings.template`（`{{filePath}}` / `{{annotations}}`）套内层 `settings.annotationTemplate`（`{{highlight}}` / `{{comment}}`，默认 `> {{highlight}}\n{{comment}}`），条目之间恒定 `\n\n`，都在 `template.ts`。内层是**按行**渲染的，两条规则各自解决一个问题：**①一行里的占位符全空则整行丢弃**（连同行内的字面文字），所以同一个模板既能写纯高亮也能写带评论的，纯高亮不会拖一个空行；**②多行的值会把本行开头的引用/缩进标记（`^[ \t>]*`）补到自己每一行前面**，所以 `> {{highlight}}` 引的是整段而不只是第一行。渲染成空的条目在 `annotationsToMarkdown` 里被跳过，否则条目之间会多出一个空行。

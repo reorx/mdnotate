@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contentBytes, docInfo, formatBytes, formatTimestamp } from '../src/lib/doc-info';
+import { contentBytes, docInfo, docStats, formatBytes, formatTimestamp } from '../src/lib/doc-info';
 import type { OpenDoc } from '../src/lib/recent-docs';
 
 /** 2026-08-11 14:30:05 local time. */
@@ -69,6 +69,25 @@ describe('formatTimestamp', () => {
 
   it('pads single-digit months, days, hours and minutes', () => {
     expect(formatTimestamp(new Date(2026, 0, 2, 3, 4, 0).getTime())).toBe('2026-01-02 03:04');
+  });
+});
+
+describe('docStats', () => {
+  it('gives both numbers ready to print', () => {
+    expect(docStats('x'.repeat(2048))).toEqual({ chars: '2,048', size: '2 KB' });
+  });
+
+  it('counts characters by code point and bytes by UTF-8, which are not the same number', () => {
+    expect(docStats('中文')).toEqual({ chars: '2', size: '6 B' });
+    expect(docStats('😀')).toEqual({ chars: '1', size: '4 B' });
+  });
+
+  it('groups a long document so the count stays readable', () => {
+    expect(docStats('a'.repeat(12_345)).chars).toBe('12,345');
+  });
+
+  it('describes an empty document as empty rather than as nothing', () => {
+    expect(docStats('')).toEqual({ chars: '0', size: '0 B' });
   });
 });
 

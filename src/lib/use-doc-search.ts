@@ -178,8 +178,16 @@ export interface UseDocSearchOptions {
   containerRef: RefObject<HTMLDivElement | null>;
   /** The element the document scrolls in — what a match is revealed within. */
   scrollRef: RefObject<HTMLDivElement | null>;
-  /** A new one drops the index and the search along with it. */
-  content: string | null;
+  /**
+   * A key that changes whenever the rendered text is replaced — another
+   * document, the same one re-read, or the same one shown as source instead of
+   * as Markdown. A new one drops the index and the search along with it.
+   *
+   * The index holds real DOM text nodes, so it does not survive a re-render
+   * that builds different ones: keying it on the content alone would leave a
+   * view switch searching nodes that are no longer in the document.
+   */
+  revision: string;
   /** Off while the reader has no document, or is covered by another view. */
   enabled: boolean;
   /** Called when the bar takes the document's selection for its query, so the
@@ -187,7 +195,7 @@ export interface UseDocSearchOptions {
   onTakeSelection: () => void;
 }
 
-export function useDocSearch({ containerRef, scrollRef, content, enabled, onTakeSelection }: UseDocSearchOptions) {
+export function useDocSearch({ containerRef, scrollRef, revision, enabled, onTakeSelection }: UseDocSearchOptions) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [composing, setComposing] = useState(false);
@@ -304,8 +312,8 @@ export function useDocSearch({ containerRef, scrollRef, content, enabled, onTake
     unpaint();
   };
 
-  // A different document is a different index, and no reason to go on hunting
-  // for the last one's word.
+  // Different text on screen is a different index, and no reason to go on
+  // hunting for the last one's word.
   useEffect(() => {
     indexRef.current = null;
     segmentsRef.current = [];
@@ -313,13 +321,13 @@ export function useDocSearch({ containerRef, scrollRef, content, enabled, onTake
     setQuery('');
     close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content]);
+  }, [revision]);
 
-  // Where the highlights are painted. `content` is deliberately NOT a
+  // Where the highlights are painted. `revision` is deliberately NOT a
   // dependency, and taking it out is not an optimisation.
   //
   // The effect above closes the bar for a new document, but a `setState` only
-  // lands on the next render — so an effect that also woke on `content` would
+  // lands on the next render — so an effect that also woke on `revision` would
   // run first, in the very same commit, still holding the old `open` and the
   // old `query`, and would search the *new* document for the *old* word. That
   // costs more than a wasted pass: `search` reveals what it finds, and the
@@ -327,7 +335,7 @@ export function useDocSearch({ containerRef, scrollRef, content, enabled, onTake
   // putting the scroll position back. Reopening an edited document with the
   // find bar still up would land you at a stale match instead of at the top.
   //
-  // Without `content` in the list, this effect simply does not run in that
+  // Without `revision` in the list, this effect simply does not run in that
   // commit; it wakes on the next render, sees the bar closed, and stops.
   useEffect(() => {
     if (!open || composing) return;

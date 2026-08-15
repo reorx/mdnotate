@@ -20,6 +20,18 @@ export interface DocInfoField {
   value: string;
 }
 
+/**
+ * The two numbers that measure a document, already written out. The info panel
+ * and the status bar both quote them, and they quote the same ones: how much
+ * text there is, and what it costs on disk.
+ */
+export interface DocStats {
+  /** Code points, grouped: `12,345`. */
+  chars: string;
+  /** UTF-8 size: `48.2 KB`. */
+  size: string;
+}
+
 export interface DocInfo {
   /** What kind of address `source` is, since the three kinds are not alike. */
   sourceLabel: string;
@@ -67,12 +79,18 @@ export function formatTimestamp(ts: number): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
+/** Measure a document. Both counts walk the whole text, so measure it once. */
+export function docStats(content: string): DocStats {
+  return { chars: formatCharCount(countChars(content)), size: formatBytes(contentBytes(content)) };
+}
+
 /** Everything the info popover shows, ready to render. */
 export function docInfo(doc: OpenDoc): DocInfo {
-  const fields: DocInfoField[] = [{ label: 'Size', value: formatBytes(contentBytes(doc.content)) }];
+  const stats = docStats(doc.content);
+  const fields: DocInfoField[] = [{ label: 'Size', value: stats.size }];
   if (doc.modifiedAt !== undefined) {
     fields.push({ label: 'Modified', value: formatTimestamp(doc.modifiedAt) });
   }
-  fields.push({ label: 'Characters', value: formatCharCount(countChars(doc.content)) });
+  fields.push({ label: 'Characters', value: stats.chars });
   return { sourceLabel: SOURCE_LABELS[doc.kind], source: doc.source, fields };
 }
