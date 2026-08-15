@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAppStore } from '../store';
 import { createAnnotation, deleteAnnotation, updateComment } from '../lib/annotate';
+import { convertBoxTables } from '../lib/box-table';
 import { DEFAULT_PANEL_WIDTHS, panelWidthFromPointer, type PanelSide } from '../lib/panels';
 import { saveSettings } from '../lib/settings';
 import { buildToc, type TocItem } from '../lib/toc';
@@ -115,6 +116,11 @@ export function Reader() {
   const showingSource = sourceView && format === 'markdown';
 
   useEffect(() => setSourceView(false), [docId]);
+
+  // What the Markdown renderer eats, not what the document is: box-drawing
+  // tables pasted from CLI output are rewritten into GFM tables here, while
+  // the store keeps the source untouched for source view, stats and hashing.
+  const renderedMarkdown = useMemo(() => (content !== null ? convertBoxTables(content) : ''), [content]);
 
   const annotator = useTextAnnotator({
     // Source view drops the annotator entirely, which is what makes selecting
@@ -276,7 +282,7 @@ export function Reader() {
                     ),
                   }}
                 >
-                  {content ?? ''}
+                  {renderedMarkdown}
                 </ReactMarkdown>
               </article>
             ) : (

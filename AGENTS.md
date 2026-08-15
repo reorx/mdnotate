@@ -15,6 +15,7 @@ src/lib/          纯逻辑 + hook：annotations（数据模型、失效判定�
                   annotation-markers（评论图标的落点几何，纯规则）、
                   popup-position（标注弹窗的落点几何，纯规则）、
                   template（导出模板渲染）、typography（阅读排版模型与校验）、toc（heading slug）、
+                  box-table（CLI 框线表格→GFM 表格的渲染前重写，只喂渲染器、不动 store）、
                   recent-docs（文档模型 + 剪切板标题/预览等纯规则）、
                   db（共享 SQLite 连接）、recents-db、annotations-db（两张表的 IO）、
                   open-doc（打开文档的唯一入口）、annotate（改动标注的唯一入口）、
