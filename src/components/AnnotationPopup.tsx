@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Highlighter, MessageSquarePlus, Trash2, X } from 'lucide-react';
 import type { Annotation } from '../lib/annotations';
+import { isCancelEscape, isSubmitEnter } from '../lib/keys';
 import { placePopup, type PopupSize } from '../lib/popup-position';
 import { NOT_ANNOTATABLE_CLASS, type AnnotationPopupState } from '../lib/use-text-annotator';
 
@@ -75,11 +76,14 @@ export function AnnotationPopup({
         ref={textareaRef}
         value={text}
         onChange={(e) => setText(e.target.value)}
+        // Both keys are the input method's before they are ours: mid-composition
+        // Enter turns the pre-edit into text and Escape drops the candidate, so
+        // reading `key` alone would save half a sentence, or throw one away.
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
+          if (isSubmitEnter(e)) {
             e.preventDefault();
             submit();
-          } else if (e.key === 'Escape') {
+          } else if (isCancelEscape(e)) {
             e.preventDefault();
             onDismiss();
           }

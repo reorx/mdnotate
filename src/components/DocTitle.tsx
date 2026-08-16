@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { writeClipboardText } from '../lib/clipboard';
 import { docInfo } from '../lib/doc-info';
+import { isCancelEscape } from '../lib/keys';
 import type { OpenDoc } from '../lib/recent-docs';
 
 /**
@@ -31,8 +32,10 @@ export function DocTitle({ doc }: { doc: OpenDoc }) {
       if (target instanceof Node && rootRef.current?.contains(target)) return;
       setOpen(false);
     };
+    // On the document, so it fires wherever the focus is — including a box
+    // somebody is composing in, where Escape only means "drop that candidate".
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (isCancelEscape(event)) setOpen(false);
     };
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown);

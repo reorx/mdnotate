@@ -1,5 +1,6 @@
 import type { RefObject } from 'react';
 import { ChevronDown, ChevronUp, TriangleAlert, X } from 'lucide-react';
+import { isImeComposing } from '../lib/keys';
 import { matchLabel } from '../lib/search';
 
 interface FindBarProps {
@@ -48,8 +49,9 @@ export function FindBar({
         // query is only run once the composition settles.
         onCompositionStart={() => onComposingChange(true)}
         onCompositionEnd={() => onComposingChange(false)}
+        // Not `isSubmitEnter`: Shift+Enter is a direction here, not a newline.
         onKeyDown={(e) => {
-          if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+          if (e.key !== 'Enter' || isImeComposing(e)) return;
           e.preventDefault();
           onStep(e.shiftKey ? -1 : 1);
         }}

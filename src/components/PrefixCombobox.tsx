@@ -1,5 +1,6 @@
 import { useId, useMemo, useState, type KeyboardEvent } from 'react';
 import { X } from 'lucide-react';
+import { isImeComposing } from '../lib/keys';
 import { matchPrefixes } from '../lib/path-prefix';
 import { CARD_INPUT } from './ActionCard';
 
@@ -53,8 +54,10 @@ export function PrefixCombobox({ value, prefixes, onChange, onCommit, onForget }
   };
 
   const keyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    // An IME's half-formed syllables belong to the composition, not to us.
-    if (e.nativeEvent.isComposing) return;
+    // An IME's half-formed syllables belong to the composition, not to us —
+    // and the arrows below are the candidate list's before they are the
+    // suggestion list's.
+    if (isImeComposing(e)) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       if (!open) setOpen(true);

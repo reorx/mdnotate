@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { watchComposition } from './lib/keys';
 import { applyTheme, readCachedTheme, resolveTheme, systemPrefersDark } from './lib/theme';
 import { installWindowDrag } from './lib/window-drag';
 
@@ -9,6 +10,10 @@ import { installWindowDrag } from './lib/window-drag';
 applyTheme(resolveTheme(readCachedTheme(), systemPrefersDark()));
 
 installWindowDrag();
+
+// Also before the first keystroke: on WKWebView the event alone cannot say
+// whether an Enter belongs to the input method (see `lib/keys.ts`).
+watchComposition();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

@@ -11,8 +11,11 @@ export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
 
   test: {
+    // Node unless a file asks for something else with an
+    // `@vitest-environment` docblock: only the handful of tests that replay
+    // real DOM events need jsdom, and it costs a second to start.
     environment: 'node',
-    include: ['tests/**/*.test.ts'],
+    include: ['tests/**/*.test.{ts,tsx}'],
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

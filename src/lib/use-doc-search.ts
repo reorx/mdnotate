@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { isCancelEscape } from './keys';
 import {
   buildSearchIndex,
   findMatches,
@@ -358,7 +359,10 @@ export function useDocSearch({ containerRef, scrollRef, revision, enabled, onTak
       const mod = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
       // The annotation popup's box has its own idea of what these keys mean,
-      // and the comment being typed in it is not ours to throw away.
+      // and the comment being typed in it is not ours to throw away. It does
+      // not cover the find box, which is an input and where Escape closing the
+      // bar is the whole point — except while an input method is composing in
+      // it, which is what `isCancelEscape` below is for.
       const inTextBox = event.target instanceof HTMLTextAreaElement;
       if (mod && key === 'f' && !inTextBox) {
         event.preventDefault();
@@ -366,7 +370,7 @@ export function useDocSearch({ containerRef, scrollRef, revision, enabled, onTak
       } else if (mod && key === 'g') {
         event.preventDefault();
         if (openRef.current) step(event.shiftKey ? -1 : 1);
-      } else if (key === 'escape' && openRef.current && !inTextBox) {
+      } else if (isCancelEscape(event) && openRef.current && !inTextBox) {
         event.preventDefault();
         close();
       }
