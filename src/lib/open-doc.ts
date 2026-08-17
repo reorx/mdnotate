@@ -16,10 +16,12 @@ import {
   clipboardDocId,
   countChars,
   deriveClipboardTitle,
+  describeReload,
   fileDocId,
   hashText,
   makeSnippet,
   type NewDoc,
+  type OpenDoc,
   type RecentDoc,
 } from './recent-docs';
 import { createLatest } from './latest';
@@ -196,6 +198,23 @@ export function openSampleDoc(): Promise<void> {
     },
     opens.start(),
   );
+}
+
+/**
+ * Read the open document again, so one edited elsewhere shows what it now says.
+ *
+ * Deliberately nothing more than an ordinary open of the same source: the same
+ * fetch, the same hash, the same rule about annotations made on text that has
+ * since changed. There is no separate reload path to keep in step with the open
+ * path, because there is no separate reload path.
+ *
+ * A document with nowhere to be read from again is turned away rather than
+ * quietly re-opened from memory: the button offering this is disabled for those
+ * already, and this is the same rule stated where it is acted on.
+ */
+export async function reloadDoc(doc: OpenDoc): Promise<void> {
+  if (!describeReload(doc).canReload) return;
+  await openSpec(doc.source);
 }
 
 /**

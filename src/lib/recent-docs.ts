@@ -192,6 +192,36 @@ export function describeClipboard(text: string | null): ClipboardPreview {
   };
 }
 
+export interface ReloadAbility {
+  canReload: boolean;
+  /** The reload button's tooltip: where the text would come from, or why it cannot. */
+  title: string;
+}
+
+/**
+ * Whether the open document can be fetched again, and what the button offering
+ * to do it should say.
+ *
+ * A file — here or on another machine — is only ever a copy of something that
+ * goes on being edited elsewhere, so reading it again is meaningful. Clipboard
+ * text is not a copy of anything: its body lives in our own database and
+ * nowhere else, so a reload could only ever hand back the very same characters.
+ *
+ * A remote reload is worth naming the machine for, since that is the part that
+ * can be slow or unreachable.
+ */
+export function describeReload(doc: OpenDoc | null): ReloadAbility {
+  if (!doc) return { canReload: false, title: 'No document to reload' };
+  if (doc.kind === 'clipboard') {
+    return { canReload: false, title: 'Clipboard text has no source to reload from' };
+  }
+  if (doc.kind === 'ssh') {
+    const host = doc.source.split(':')[0];
+    return { canReload: true, title: `Reload from ${host || doc.source}` };
+  }
+  return { canReload: true, title: 'Reload from disk' };
+}
+
 /**
  * Apply an open to a recents list: the entry replaces any earlier one carrying
  * the same id, the list stays newest-first, and it never grows past the cap.

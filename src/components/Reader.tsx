@@ -128,7 +128,13 @@ export function Reader() {
     // highlights. Switching back rebuilds it from the store, annotations and
     // all — their offsets were only ever measured against the rendered text.
     enabled: !!content && !showingSource,
-    documentKey: docId,
+    // The text, not just the document. A reload keeps the same id, so keying on
+    // the id alone would leave the annotator standing while the prose under it
+    // was replaced — painting the old offsets over the new text, which is the
+    // very mis-anchoring the stale-annotation rule exists to prevent. Rebuilt,
+    // it seeds itself from the store, where those annotations have already been
+    // dropped. Same reasoning, same key, as the search index below.
+    documentKey: `${docId}#${contentHash}`,
     scrollRef,
     annotations,
     theme,

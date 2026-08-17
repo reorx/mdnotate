@@ -31,7 +31,12 @@ export type AnnotationPopupState =
 export interface UseTextAnnotatorOptions {
   /** Only enable on stable, fully-rendered content. */
   enabled: boolean;
-  /** Recreate the annotator when the underlying document changes. */
+  /**
+   * Recreate the annotator whenever the text it anchors into changes — a
+   * different document, or the same one read again after an edit. Offsets are
+   * measured against the rendered text, so text that has been replaced leaves
+   * every anchor pointing at the wrong words.
+   */
   documentKey?: string | null;
   /**
    * The reader's own scroller. Passed in rather than guessed: the library walks

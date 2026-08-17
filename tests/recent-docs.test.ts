@@ -4,6 +4,7 @@ import {
   countChars,
   deriveClipboardTitle,
   describeClipboard,
+  describeReload,
   fileDocId,
   formatCharCount,
   formatRelativeTime,
@@ -13,6 +14,7 @@ import {
   MIN_CLIPBOARD_CHARS,
   RECENTS_LIMIT,
   upsertRecent,
+  type OpenDoc,
 } from '../src/lib/recent-docs';
 
 /** 2026-08-11 14:30 local time — every time-dependent expectation is relative to this. */
@@ -247,5 +249,47 @@ describe('formatRelativeTime', () => {
 
   it('includes the year for dates outside the current year', () => {
     expect(formatRelativeTime(new Date(2025, 10, 20, 9, 0, 0).getTime(), NOW)).toBe('2025-11-20');
+  });
+});
+
+describe('describeReload', () => {
+  const doc = (patch: Partial<OpenDoc>): OpenDoc => ({
+    id: 'file:/notes/a.md',
+    kind: 'file',
+    title: 'a.md',
+    source: '/notes/a.md',
+    content: 'text',
+    format: 'markdown',
+    contentHash: 'abc',
+    ...patch,
+  });
+
+  it('reloads a local file', () => {
+    expect(describeReload(doc({}))).toEqual({ canReload: true, title: 'Reload from disk' });
+  });
+
+  it('reloads a remote file, naming the machine it has to reach', () => {
+    expect(describeReload(doc({ kind: 'ssh', source: 'workbench:notes/a.md' }))).toEqual({
+      canReload: true,
+      title: 'Reload from workbench',
+    });
+  });
+
+  it('names the whole source when a remote one carries no host', () => {
+    expect(describeReload(doc({ kind: 'ssh', source: 'notes/a.md' }))).toEqual({
+      canReload: true,
+      title: 'Reload from notes/a.md',
+    });
+  });
+
+  it('refuses clipboard text, which has nowhere to be read from again', () => {
+    expect(describeReload(doc({ kind: 'clipboard', source: 'Project Retro' }))).toEqual({
+      canReload: false,
+      title: 'Clipboard text has no source to reload from',
+    });
+  });
+
+  it('refuses when no document is open', () => {
+    expect(describeReload(null).canReload).toBe(false);
   });
 });

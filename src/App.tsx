@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { House, LoaderCircle, PanelLeft, PanelRight, Settings, SquareArrowOutUpRight } from 'lucide-react';
-import { openSpec } from './lib/open-doc';
+import { House, LoaderCircle, PanelLeft, PanelRight, RotateCw, Settings, SquareArrowOutUpRight } from 'lucide-react';
+import { openSpec, reloadDoc } from './lib/open-doc';
+import { describeReload } from './lib/recent-docs';
 import { loadSettings } from './lib/settings';
 import { isTauri } from './lib/tauri-env';
 import {
@@ -79,6 +80,8 @@ function App() {
     };
   }, [updateSettings]);
 
+  const reload = describeReload(doc);
+
   // Everything other than the reader is laid over it instead of replacing it:
   // the reader keeps its scroll position, its annotator and its rendered
   // markdown, so a trip to export or settings comes back to the same page.
@@ -110,6 +113,20 @@ function App() {
         >
           <House className="h-4 w-4" />
         </button>
+        {/* Only while the reader is the thing on top: it re-reads the document
+            you are looking at, and putting the document back on screen is what
+            an open does — pressed from settings or export it would throw you
+            out of them. */}
+        {doc && view === 'reader' && (
+          <button
+            className="rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 disabled:cursor-not-allowed disabled:opacity-40 dark:disabled:opacity-25"
+            disabled={!reload.canReload}
+            title={reload.title}
+            onClick={() => reloadDoc(doc).catch((e) => setError(String(e)))}
+          >
+            <RotateCw className="h-4 w-4" />
+          </button>
+        )}
         {doc && <DocTitle doc={doc} />}
         {opening && (
           <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-neutral-500" title={opening}>
