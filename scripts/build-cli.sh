@@ -73,8 +73,25 @@ fi
 WORK=$(mktemp -d)
 KEYCHAIN="$WORK/mdnotate-cli.keychain"
 KEYCHAIN_PASSWORD=$(uuidgen)
+
+# 本机原有的搜索列表，等下要原样放回去（下面那段说明为什么非动它不可）。
+# 读不出来就一个都不动：把搜索列表设成空的，代价是本机所有钥匙串访问都瞎掉。
+ORIGINAL_KEYCHAINS=()
+while IFS= read -r line; do
+  # `list-keychains` 每行是缩进 + 带引号的路径。
+  line=$(sed -e 's/^[[:space:]]*//' -e 's/^"//' -e 's/"$//' <<<"$line")
+  [[ -n "$line" ]] && ORIGINAL_KEYCHAINS+=("$line")
+done < <(security list-keychains -d user)
+if [[ ${#ORIGINAL_KEYCHAINS[@]} -eq 0 ]]; then
+  echo "build-cli: 读不出 keychain 搜索列表，不敢改它" >&2
+  exit 1
+fi
+
 # 临时 keychain 与临时 p12 都不留下——密钥材料不该在磁盘上活过这次构建。
 cleanup() {
+  if [[ ${#ORIGINAL_KEYCHAINS[@]} -gt 0 ]]; then
+    security list-keychains -d user -s "${ORIGINAL_KEYCHAINS[@]}" >/dev/null 2>&1 || true
+  fi
   security delete-keychain "$KEYCHAIN" 2>/dev/null || true
   rm -rf "$WORK"
 }
@@ -92,6 +109,14 @@ security import "$WORK/cert.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD"
 security set-key-partition-list -S apple-tool:,apple:,codesign: \
   -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
 
+# ⚠️ **`codesign --keychain` 不管用**，别拿它当隔离手段：codesign 认的是搜索列表，
+# `--keychain` 顶多算个提示。实测在一台 login keychain 里本来就有这张证书的机器上，
+# 把 --keychain 指向一个空钥匙串照样签得出来——也就是说本地"通过"完全可能是碰巧走了
+# login keychain，而 CI 上没有那份，就只剩一句 `error: The specified item could not be
+# found in the keychain.`（v0.7.0 第一次发版就是这么挂的）。所以必须真的把临时钥匙串
+# 放进搜索列表，签完再放回去。tauri 自己签 app 时做的也是这件事。
+security list-keychains -d user -s "${ORIGINAL_KEYCHAINS[@]}" "$KEYCHAIN" >/dev/null
+
 # 用指纹而不是证书名字：同一台机器上可能装着多张 Developer ID 证书，名字会撞。
 IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" |
   awk '/Developer ID Application/ { print $2; exit }')
@@ -101,12 +126,16 @@ if [[ -z "$IDENTITY" ]]; then
   exit 1
 fi
 
-# security 认得不带 -db 后缀的名字，codesign 不一定，所以给它落在盘上的那个。
-KEYCHAIN_FILE="$KEYCHAIN"
-[[ -f "$KEYCHAIN-db" ]] && KEYCHAIN_FILE="$KEYCHAIN-db"
+# 上面那条坑的前置断言：codesign 待会儿是**从搜索列表**里找这个指纹的，所以现在就用
+# 搜索列表（不带 keychain 参数）问一遍。问不到就说清楚是搜索列表的问题，而不是把
+# codesign 那句没头没尾的报错扔给下一个人。
+if ! security find-identity -v -p codesigning | grep -q "$IDENTITY"; then
+  echo "build-cli: 证书导进来了，但搜索列表里看不到它——codesign 会找不到" >&2
+  security list-keychains -d user >&2
+  exit 1
+fi
 
-codesign --force --keychain "$KEYCHAIN_FILE" --sign "$IDENTITY" \
-  --options runtime --timestamp "$OUT"
+codesign --force --sign "$IDENTITY" --options runtime --timestamp "$OUT"
 codesign --verify --strict "$OUT"
 echo "build-cli: 已签名 $OUT"
 codesign -dvv "$OUT" 2>&1 | grep -E 'Authority=Developer ID|runtime|Timestamp' || true
