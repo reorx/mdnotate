@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import { useAppStore } from '../store';
 import { createAnnotation, deleteAnnotation, updateComment } from '../lib/annotate';
 import { convertBoxTables } from '../lib/box-table';
@@ -275,11 +276,18 @@ export function Reader() {
                 listing, depends on. */}
             {format === 'markdown' && !showingSource ? (
               <article ref={articleRef} className="prose-dense">
+                {/* remark-math is here for its tokenizer alone — nothing
+                    typesets the formula, and no KaTeX is pulled in behind it.
+                    What it buys is that `$$…$$` stops being an ordinary
+                    paragraph: a `---` under a formula no longer swallows the
+                    whole block into a heading, a lone `-` line inside it is no
+                    longer a bullet, and `\\` is no longer eaten as an escape.
+                    Untypeset, but shown exactly as it was written. */}
                 {/* A table cannot wrap below its min-content width, and the
                     scroller no longer scrolls sideways for it — so a wide table
                     scrolls inside its own box, like `pre` always has. */}
                 <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
+                  remarkPlugins={[remarkGfm, remarkMath]}
                   components={{
                     table: ({ node: _node, ...props }) => (
                       <div className="overflow-x-auto">

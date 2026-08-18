@@ -241,6 +241,23 @@ html ::selection {
   font-size: 0.85em;
 }
 
+/* Math, as remark-math leaves it: `$$…$$` arrives as a `pre > code`, `$…$` as
+   an inline `code`. It is a formula, not a program — so it keeps the monospace
+   and gives up the frame, and a display one sits centred the way a typeset one
+   would. */
+.prose-dense pre:has(> .math-display) {
+  background: none;
+  border: none;
+  padding: 0.2em 0;
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: auto;
+}
+.prose-dense .math-inline {
+  background: none;
+  padding: 0;
+}
+
 .prose-dense blockquote {
   border-left: 3px solid var(--prose-quote-border);
   padding-left: 0.8em;
