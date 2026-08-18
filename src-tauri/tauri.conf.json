@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "mdnotate",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "identifier": "top.ideachat.mdnotate",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "bash scripts/build-cli.sh && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "bash scripts/build-cli.sh && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {

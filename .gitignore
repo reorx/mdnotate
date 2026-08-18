@@ -15,6 +15,9 @@ dist-ssr
 # Scratch scripts and verification screenshots
 tmp
 
+# The `mdnotate` command, built by scripts/build-cli.sh from src-tauri/cli
+src-tauri/resources/bin/mdnotate
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

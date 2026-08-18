@@ -2415,7 +2415,7 @@ dependencies = [
 
 [[package]]
 name = "mdnotate"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "core-foundation",
  "objc2",
@@ -2429,6 +2429,14 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-sql",
  "tauri-plugin-store",
+]
+
+[[package]]
+name = "mdnotate-cli"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

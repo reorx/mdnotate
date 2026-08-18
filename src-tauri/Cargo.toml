@@ -1,6 +1,16 @@
+# `cli` is the `mdnotate` command, a separate crate rather than a second
+# `[[bin]]` here: sharing this package would link it against `mdnotate_lib` and
+# so against tauri, sqlx and the rest, for a program whose whole job is to call
+# `open` once. `default-members` keeps it out of a bare `cargo build`, which is
+# what `tauri dev` and `tauri build` run — the command is built on its own, by
+# `scripts/build-cli.sh`.
+[workspace]
+members = [".", "cli"]
+default-members = ["."]
+
 [package]
 name = "mdnotate"
-version = "0.6.0"
+version = "0.7.0"
 description = "Markdown Annotate - read and annotate local Markdown files"
 authors = ["reorx"]
 edition = "2021"

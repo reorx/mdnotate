@@ -60,6 +60,14 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # 只测 CLI crate：它不依赖 tauri，几秒就完；`--workspace` 会连 app crate
+      # 一起编，而 tauri-build 那时还找不到 ../dist（pnpm build 要到下一步才跑）。
+      - name: Run CLI tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml -p mdnotate-cli
+
+      # MDNOTATE_CLI_TARGETS 是 scripts/build-cli.sh 读的（beforeBundleCommand
+      # 会调它）：Resources 里的 mdnotate 命令是独立 crate，tauri 的
+      # --target universal-apple-darwin 不管它，两个架构各编一次再 lipo 由脚本自己做。
       - name: Build, sign and notarize
         env:
           APPLE_CERTIFICATE: ${{ secrets.MACOS_CERT_P12 }}
@@ -67,17 +75,25 @@ jobs:
           APPLE_API_KEY: ${{ secrets.NOTARY_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.NOTARY_ISSUER_ID }}
           APPLE_API_KEY_PATH: /tmp/notary-key.p8
+          MDNOTATE_CLI_TARGETS: aarch64-apple-darwin,x86_64-apple-darwin
         run: |
           echo "${{ secrets.NOTARY_KEY }}" | base64 -d > "$APPLE_API_KEY_PATH"
           pnpm tauri build --target universal-apple-darwin
           rm "$APPLE_API_KEY_PATH"
 
-      # 发布前自查：Developer ID 签名、hardened runtime、时间戳、Gatekeeper 评估
+      # 发布前自查：Developer ID 签名、hardened runtime、时间戳、Gatekeeper 评估。
+      # Resources 里的 mdnotate 命令单独查一遍：它是 bundle 里第二个 Mach-O，
+      # tauri 的签名扫描不递归 Resources，签名是 build-cli.sh 自己盖的，而公证
+      # 要求每一个 Mach-O 都有——漏了这里，dmg 会在 notarytool 那步被打回。
       - name: Verify signature
         run: |
           APP=$(echo src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app)
           codesign -dvv "$APP" 2>&1 | grep -E "Authority=Developer ID|runtime|Timestamp"
           spctl -a -vv -t exec "$APP"
+          CLI="$APP/Contents/Resources/bin/mdnotate"
+          codesign -dvv "$CLI" 2>&1 | grep -E "Authority=Developer ID|runtime|Timestamp"
+          lipo -archs "$CLI" | grep -q arm64
+          lipo -archs "$CLI" | grep -q x86_64
 
       - uses: actions/upload-artifact@v7
         with:

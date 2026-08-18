@@ -1,0 +1,24 @@
+[package]
+# Not `mdnotate`: the app's own binary already goes by that name, and both land
+# in the same target directory. What the command is called on someone's PATH is
+# decided by the symlink `cli_install` makes, and has nothing to do with this.
+name = "mdnotate-cli"
+# Deliberately fixed, and deliberately not the app's version:
+# `mdnotate --version` reads `CFBundleShortVersionString` off the bundle it
+# opens, so this number is never shown to anyone and a release must not have to
+# remember it. `scripts/bump-version.sh` leaves it alone.
+version = "0.0.0"
+description = "The mdnotate command, bundled into the app's Resources"
+authors = ["reorx"]
+edition = "2021"
+
+[[bin]]
+name = "mdnotate-cli"
+path = "src/main.rs"
+
+# Everything else this needs — open, ssh, defaults, date, hostname, ps — is
+# asked of the OS through `std::process::Command`, the same way `read_remote_file`
+# and `default_app` do it, rather than taken from crates.io.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

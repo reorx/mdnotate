@@ -573,7 +573,7 @@ fn set_markdown_default_app(app: AppHandle) {
     default_app::request_default(&app.config().identifier);
 }
 
-/// Where the app's own bundled CLI script is, and every directory worth looking
+/// Where the app's own bundled CLI command is, and every directory worth looking
 /// in for a link to it. `custom_dir` is a directory the user typed in some
 /// earlier session and the frontend has remembered for us: this side keeps no
 /// state, so without being told again it would report a command installed
@@ -581,10 +581,10 @@ fn set_markdown_default_app(app: AppHandle) {
 #[cfg(target_os = "macos")]
 fn cli_dirs(app: &AppHandle, custom_dir: Option<String>) -> (Vec<PathBuf>, PathBuf) {
     let home = app.path().home_dir().unwrap_or_else(|_| PathBuf::from("/"));
-    let script = app
+    let command = app
         .path()
         .resource_dir()
-        .map(|dir| cli_install::script_path(&dir))
+        .map(|dir| cli_install::command_path(&dir))
         .unwrap_or_default();
     let mut dirs = cli_install::well_known_dirs(&home);
     // Appended rather than replacing anything, and only when it is somewhere
@@ -596,14 +596,14 @@ fn cli_dirs(app: &AppHandle, custom_dir: Option<String>) -> (Vec<PathBuf>, PathB
             dirs.push(dir);
         }
     }
-    (dirs, script)
+    (dirs, command)
 }
 
 #[cfg(target_os = "macos")]
 #[tauri::command]
 fn cli_install_status(app: AppHandle, custom_dir: Option<String>) -> CliInstallStatus {
-    let (dirs, script) = cli_dirs(&app, custom_dir);
-    cli_install::status(&dirs, &script)
+    let (dirs, command) = cli_dirs(&app, custom_dir);
+    cli_install::status(&dirs, &command)
 }
 
 /// Put the `mdnotate` command in `dir`. Must be async: a directory we cannot
@@ -613,15 +613,15 @@ fn cli_install_status(app: AppHandle, custom_dir: Option<String>) -> CliInstallS
 #[cfg(target_os = "macos")]
 #[tauri::command(async)]
 fn cli_install(app: AppHandle, dir: String) -> Result<(), String> {
-    let (_, script) = cli_dirs(&app, None);
-    cli_install::install(Path::new(&dir), &script)
+    let (_, command) = cli_dirs(&app, None);
+    cli_install::install(Path::new(&dir), &command)
 }
 
 #[cfg(target_os = "macos")]
 #[tauri::command(async)]
 fn cli_uninstall(app: AppHandle, dir: String) -> Result<(), String> {
-    let (_, script) = cli_dirs(&app, None);
-    cli_install::uninstall(Path::new(&dir), &script)
+    let (_, command) = cli_dirs(&app, None);
+    cli_install::uninstall(Path::new(&dir), &command)
 }
 
 // Window dragging for the toolbar. tauri's stock `start_dragging` reaches
