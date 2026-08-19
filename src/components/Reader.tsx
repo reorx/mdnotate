@@ -6,6 +6,7 @@ import rehypeKatex from 'rehype-katex';
 import { useAppStore } from '../store';
 import { createAnnotation, deleteAnnotation, updateComment } from '../lib/annotate';
 import { convertBoxTables } from '../lib/box-table';
+import { rehypeMathTex } from '../lib/math-quote';
 import { normalizeMathDelimiters } from '../lib/math-source';
 import { DEFAULT_PANEL_WIDTHS, panelWidthFromPointer, type PanelSide } from '../lib/panels';
 import { saveSettings } from '../lib/settings';
@@ -147,7 +148,7 @@ export function Reader() {
         // and both halves are text. Annotation offsets, the quote that gets
         // exported, the ⌘F index and the TOC all read the rendered text, and
         // none of them can tell a hidden copy from the visible one.
-        rehypePlugins={[[rehypeKatex, { output: 'html' }]]}
+        rehypePlugins={[rehypeMathTex, [rehypeKatex, { output: 'html' }]]}
         components={{
           table: ({ node: _node, ...props }) => (
             <div className="overflow-x-auto">

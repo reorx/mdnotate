@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import {
   createTextAnnotator,
+  isRevived,
   NOT_ANNOTATABLE_CLASS,
+  type RevivedTextSelector,
   type TextAnnotation,
   type TextAnnotator,
+  type TextSelector,
 } from '@recogito/text-annotator';
 import '@recogito/text-annotator/text-annotator.css';
 import { commentMarkers, sameMarkers, type CommentMarker, type MarkerRect } from './annotation-markers';
 import { fromRecogitoAnnotation, toRecogitoAnnotation, type Annotation } from './annotations';
+import { quoteFromRange } from './math-quote';
 import type { PopupAnchor, PopupBounds } from './popup-position';
 import type { ResolvedTheme } from './theme';
 
@@ -286,7 +290,13 @@ export function useTextAnnotator({
       anno.cancelSelected();
       return;
     }
-    const annotation: Annotation = { ...created, comment };
+    // What the annotator quotes is the text it can see, and where that text is
+    // a formula it is KaTeX's glyphs in painting order. The selector still
+    // carries the live range it was made from, so the quote is rebuilt from it
+    // with the TeX put back — and left alone when there was no formula in it.
+    const revived = draft?.target.selector.find((s: TextSelector): s is RevivedTextSelector => isRevived(s));
+    const quote = (revived && quoteFromRange(revived.range)) || created.quote;
+    const annotation: Annotation = { ...created, quote, comment };
     if (comment !== null) anno.updateAnnotation(toRecogitoAnnotation(annotation));
     onCreate(annotation);
     anno.cancelSelected();
