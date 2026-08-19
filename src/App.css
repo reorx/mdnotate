@@ -43,6 +43,7 @@
   --prose-table-head-bg: #f7f7f6;
   --prose-link: #b45309;
   --prose-hr: #e5e5e3;
+  --prose-error: #cc0000;
 }
 
 /*
@@ -100,6 +101,7 @@
   --prose-table-head-bg: #2a2a2c;
   --prose-link: #fbbf24;
   --prose-hr: #3a3a3c;
+  --prose-error: #ff6b6b;
 }
 
 /*
@@ -241,21 +243,30 @@ html ::selection {
   font-size: 0.85em;
 }
 
-/* Math, as remark-math leaves it: `$$…$$` arrives as a `pre > code`, `$…$` as
-   an inline `code`. It is a formula, not a program — so it keeps the monospace
-   and gives up the frame, and a display one sits centred the way a typeset one
-   would. */
-.prose-dense pre:has(> .math-display) {
-  background: none;
-  border: none;
-  padding: 0.2em 0;
-  width: fit-content;
-  max-width: 100%;
-  margin-inline: auto;
+/* Math. KaTeX brings its own stylesheet and sizes itself in `em`, so it follows
+   the reading type size on its own, and its only colour declaration is
+   `currentColor` — which is what makes the dark palette above cover it too.
+   Two things are left to say here.
+
+   A display formula cannot wrap, and the scroller does not scroll sideways for
+   it: like a wide table and like `pre`, it scrolls inside its own box. The
+   padding is not decoration — `overflow` clips at the border box, and KaTeX
+   puts the tallest fractions and integrals slightly outside their own line. */
+.prose-dense .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5em 0;
+  /* KaTeX asks for 1em above and below. This page is denser than that
+     everywhere else (0.55em between paragraphs), and the padding above already
+     buys the formula some air. */
+  margin: 0.5em 0;
 }
-.prose-dense .math-inline {
-  background: none;
-  padding: 0;
+
+/* A formula that does not parse. KaTeX writes the colour inline, and inline
+   beats a class, so this is the one place it has to be said with a variable
+   the dark palette can move. */
+.prose-dense .katex-error {
+  color: var(--prose-error) !important;
 }
 
 .prose-dense blockquote {
