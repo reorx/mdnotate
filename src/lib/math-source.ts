@@ -18,6 +18,18 @@
 // and also acts as a hard barrier — no inline code span and no `\[…\]` pair may
 // reach across one.
 
+/**
+ * Whether the renderer would typeset anything in this document.
+ *
+ * Read by the document hash rather than by the renderer, which is why it errs
+ * towards yes: the cost of a false yes is one batch of annotations discarded
+ * with the banner that already says so, and the cost of a false no is a
+ * highlight left pointing silently at the wrong words.
+ */
+export function hasMath(markdown: string): boolean {
+  return /\$\$[\s\S]+?\$\$|\$[^$\n]+\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\]|^ {0,3}(?:`{3,}|~{3,})math\b/m.test(markdown);
+}
+
 /** The run of identical characters starting at `i`. */
 function runLength(text: string, i: number, ch: string): number {
   let n = 0;

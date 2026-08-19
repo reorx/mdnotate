@@ -1,5 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeMathDelimiters } from '../src/lib/math-source';
+import { hasMath, normalizeMathDelimiters } from '../src/lib/math-source';
+
+describe('hasMath', () => {
+  it('finds every shape the renderer would typeset', () => {
+    expect(hasMath('the value $x$ here')).toBe(true);
+    expect(hasMath('a\n\n$$\nE = mc^2\n$$\n\nb')).toBe(true);
+    expect(hasMath('inline \\(a+b\\) here')).toBe(true);
+    expect(hasMath('display \\[a+b\\] here')).toBe(true);
+    expect(hasMath('```math\na+b\n```')).toBe(true);
+  });
+
+  it('is not fooled by a lone dollar sign', () => {
+    expect(hasMath('it costs $5 per day')).toBe(false);
+    expect(hasMath('# Title\n\nordinary prose')).toBe(false);
+    expect(hasMath('')).toBe(false);
+  });
+
+  it('says yes to two amounts on one line, because the renderer says yes too', () => {
+    // `$5 and saves $10` really does typeset as a formula while single-dollar
+    // math is on. Saying no here would be the lie.
+    expect(hasMath('it costs $5 and saves $10')).toBe(true);
+  });
+});
 
 describe('normalizeMathDelimiters', () => {
   describe('LaTeX delimiters', () => {
