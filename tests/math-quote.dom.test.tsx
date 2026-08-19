@@ -12,14 +12,14 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { normalizeMathDelimiters } from '../src/lib/math-source';
-import { quoteFromRange, rehypeMathTex } from '../src/lib/math-quote';
+import { KATEX_OPTIONS, quoteFromRange, rehypeMathTex } from '../src/lib/math-quote';
 
 /** The document exactly as `Reader` builds it. */
 function render(markdown: string): HTMLElement {
   const html = renderToStaticMarkup(
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeMathTex, [rehypeKatex, { output: 'html' }]]}
+      rehypePlugins={[rehypeMathTex, [rehypeKatex, KATEX_OPTIONS]]}
     >
       {normalizeMathDelimiters(markdown)}
     </ReactMarkdown>,
@@ -133,6 +133,15 @@ describe('rehypeMathTex', () => {
     expect(wrapper?.getAttribute('data-tex-display')).toBe('true');
   });
 
+  it('wraps display math in a block element and inline math in a span', () => {
+    // Not cosmetic. `use-doc-search` decides that two words are not next to
+    // each other by the block they sit in, and KaTeX's own display wrapper is
+    // a `span` — without a block here, ⌘F could match a phrase that runs from
+    // the paragraph above a formula into the one below it.
+    expect(render('$$\nE = mc^2\n$$').querySelector('[data-tex]')?.tagName).toBe('DIV');
+    expect(render('a $x$ b').querySelector('[data-tex]')?.tagName).toBe('SPAN');
+  });
+
   it('covers a ```math fence as well', () => {
     const article = render('```math\nE = mc^2\n```');
     const wrapper = article.querySelector('[data-tex]');
@@ -148,5 +157,17 @@ describe('rehypeMathTex', () => {
   it('keeps the TeX of a formula KaTeX could not parse', () => {
     const article = render('Broken $\\frobnicate{x}$ here.');
     expect(quoteFromRange(selectAll(article))).toBe('Broken $\\frobnicate{x}$ here.');
+  });
+
+  it('colours a formula that does not parse with a variable, not a fixed red', () => {
+    // KaTeX writes this into a `style` attribute, which outranks any rule the
+    // app could write — so the theme has to reach it through the value itself,
+    // or a broken formula is unreadable on a dark page.
+    const article = render('Broken $\\frobnicate{x}$ here.');
+    const reddened = article.querySelectorAll('[style*="color:"]');
+    expect(reddened.length).toBeGreaterThan(0);
+    for (const el of reddened) {
+      expect(el.getAttribute('style')).toContain('var(--prose-error)');
+    }
   });
 });

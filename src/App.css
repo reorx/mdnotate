@@ -262,12 +262,10 @@ html ::selection {
   margin: 0.5em 0;
 }
 
-/* A formula that does not parse. KaTeX writes the colour inline, and inline
-   beats a class, so this is the one place it has to be said with a variable
-   the dark palette can move. */
-.prose-dense .katex-error {
-  color: var(--prose-error) !important;
-}
+/* A formula that does not parse is coloured by KaTeX itself, in a `style`
+   attribute on the offending run that no stylesheet here could outrank. So the
+   colour is handed to it as `--prose-error` instead (see `KATEX_OPTIONS`), and
+   the only thing left to do is define it, above, in both palettes. */
 
 .prose-dense blockquote {
   border-left: 3px solid var(--prose-quote-border);

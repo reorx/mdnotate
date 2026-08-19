@@ -6,7 +6,7 @@ import rehypeKatex from 'rehype-katex';
 import { useAppStore } from '../store';
 import { createAnnotation, deleteAnnotation, updateComment } from '../lib/annotate';
 import { convertBoxTables } from '../lib/box-table';
-import { rehypeMathTex } from '../lib/math-quote';
+import { KATEX_OPTIONS, rehypeMathTex } from '../lib/math-quote';
 import { normalizeMathDelimiters } from '../lib/math-source';
 import { DEFAULT_PANEL_WIDTHS, panelWidthFromPointer, type PanelSide } from '../lib/panels';
 import { saveSettings } from '../lib/settings';
@@ -143,12 +143,10 @@ export function Reader() {
       // box, like `pre` always has. A wide formula does the same, from CSS.
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        // `output: 'html'` and not the default `htmlAndMathml`: the default
-        // renders every formula twice over, once as MathML and once as glyphs,
-        // and both halves are text. Annotation offsets, the quote that gets
-        // exported, the ⌘F index and the TOC all read the rendered text, and
-        // none of them can tell a hidden copy from the visible one.
-        rehypePlugins={[rehypeMathTex, [rehypeKatex, { output: 'html' }]]}
+        // Both plugins and the options behind them are explained in
+        // `math-quote.ts`; the order is the load-bearing part, since the TeX has
+        // to be put somewhere safe before KaTeX replaces the node holding it.
+        rehypePlugins={[rehypeMathTex, [rehypeKatex, KATEX_OPTIONS]]}
         components={{
           table: ({ node: _node, ...props }) => (
             <div className="overflow-x-auto">

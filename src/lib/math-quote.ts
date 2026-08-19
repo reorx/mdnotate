@@ -16,6 +16,23 @@ import type { Element, Node, Parent, Root, Text } from 'hast';
 // annotator measures its offsets in characters of rendered text, and a second,
 // invisible copy of every formula would move every offset after it.
 
+/**
+ * How `rehype-katex` is asked to render, kept here rather than at the call site
+ * because both settings are consequences of what is written above.
+ *
+ * `output: 'html'` and not the default `htmlAndMathml`, for the reason just
+ * given: the default lays every formula down twice, once as MathML and once as
+ * glyphs, and both halves are text that nothing downstream can tell apart from
+ * the visible one.
+ *
+ * `errorColor` is a custom property rather than a colour. KaTeX writes it
+ * straight into a `style` attribute on the offending run — which beats any
+ * stylesheet — so the only way a formula that does not parse can be legible on
+ * both a white and a near-black page is to hand KaTeX something that already
+ * knows the difference.
+ */
+export const KATEX_OPTIONS = { output: 'html', errorColor: 'var(--prose-error)' } as const;
+
 /** Where the TeX is parked, and how a display formula is told from an inline one. */
 const TEX_ATTRIBUTE = 'data-tex';
 const DISPLAY_ATTRIBUTE = 'data-tex-display';
