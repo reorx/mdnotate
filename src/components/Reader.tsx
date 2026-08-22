@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { useAppStore } from '../store';
 import { createAnnotation, deleteAnnotation, updateComment } from '../lib/annotate';
 import { convertBoxTables } from '../lib/box-table';
+import { KATEX_OPTIONS, rehypeMathTex } from '../lib/math-quote';
+import { normalizeMathDelimiters } from '../lib/math-source';
 import { DEFAULT_PANEL_WIDTHS, panelWidthFromPointer, type PanelSide } from '../lib/panels';
 import { saveSettings } from '../lib/settings';
 import { buildToc, type TocItem } from '../lib/toc';
@@ -118,9 +122,44 @@ export function Reader() {
   useEffect(() => setSourceView(false), [docId]);
 
   // What the Markdown renderer eats, not what the document is: box-drawing
-  // tables pasted from CLI output are rewritten into GFM tables here, while
+  // tables pasted from CLI output are rewritten into GFM tables here, and the
+  // math delimiters remark-math misreads are put into the form it reads, while
   // the store keeps the source untouched for source view, stats and hashing.
-  const renderedMarkdown = useMemo(() => (content !== null ? convertBoxTables(content) : ''), [content]);
+  // Tables go first: their rewrite rebuilds whole lines out of a grid, and the
+  // math pass should see the line structure that finally reaches the parser.
+  const renderedMarkdown = useMemo(
+    () => (content !== null ? normalizeMathDelimiters(convertBoxTables(content)) : ''),
+    [content],
+  );
+
+  // react-markdown re-parses its whole input on every render, and this
+  // component renders whenever a popup opens or a panel is dragged. Parsing was
+  // cheap until KaTeX joined the pipeline; typesetting a page of formulas is
+  // not, so the element is built once per document and reused after that.
+  const markdownBody = useMemo(
+    () => (
+      // A table cannot wrap below its min-content width, and the scroller no
+      // longer scrolls sideways for it — so a wide table scrolls inside its own
+      // box, like `pre` always has. A wide formula does the same, from CSS.
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        // Both plugins and the options behind them are explained in
+        // `math-quote.ts`; the order is the load-bearing part, since the TeX has
+        // to be put somewhere safe before KaTeX replaces the node holding it.
+        rehypePlugins={[rehypeMathTex, [rehypeKatex, KATEX_OPTIONS]]}
+        components={{
+          table: ({ node: _node, ...props }) => (
+            <div className="overflow-x-auto">
+              <table {...props} />
+            </div>
+          ),
+        }}
+      >
+        {renderedMarkdown}
+      </ReactMarkdown>
+    ),
+    [renderedMarkdown],
+  );
 
   const annotator = useTextAnnotator({
     // Source view drops the annotator entirely, which is what makes selecting
@@ -275,21 +314,7 @@ export function Reader() {
                 listing, depends on. */}
             {format === 'markdown' && !showingSource ? (
               <article ref={articleRef} className="prose-dense">
-                {/* A table cannot wrap below its min-content width, and the
-                    scroller no longer scrolls sideways for it — so a wide table
-                    scrolls inside its own box, like `pre` always has. */}
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    table: ({ node: _node, ...props }) => (
-                      <div className="overflow-x-auto">
-                        <table {...props} />
-                      </div>
-                    ),
-                  }}
-                >
-                  {renderedMarkdown}
-                </ReactMarkdown>
+                {markdownBody}
               </article>
             ) : (
               <article ref={articleRef} className="prose-plain">

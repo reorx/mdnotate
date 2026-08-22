@@ -25,6 +25,7 @@ import {
   type RecentDoc,
 } from './recent-docs';
 import { createLatest } from './latest';
+import { hasMath } from './math-source';
 import { loadBody, recordOpen } from './recents-db';
 import { SAMPLE_DOC, SAMPLE_DOC_PATH } from './sample-doc';
 import { isTauri } from './tauri-env';
@@ -36,6 +37,28 @@ import { announceDoc } from './window-doc';
  * each window has its own reader and its own idea of what it is showing.
  */
 const opens = createLatest();
+
+/**
+ * Bumped when a change to the math pipeline moves the rendered text under a
+ * document whose source has not changed a byte.
+ *
+ * Annotation offsets are measured over the rendered text, but the hash they are
+ * checked against covers the source — which is exactly right for the case it
+ * was built for (the file was edited elsewhere) and blind to this one. Without
+ * it, every highlight after the first formula in a document would come back
+ * pointing at the wrong words, silently, which is the one outcome the hash rule
+ * exists to prevent. Folding it in gives up those annotations once instead,
+ * through the banner that already reports them.
+ *
+ * It is folded in only where it applies. A version in *every* hash would throw
+ * away the annotations in every document ever read, math or not.
+ */
+const MATH_RENDER_VERSION = 'katex-1';
+
+function docIdentity(doc: NewDoc): string {
+  const typeset = doc.format === 'markdown' && hasMath(doc.content);
+  return typeset ? `${MATH_RENDER_VERSION}\n${doc.content}` : doc.content;
+}
 
 /**
  * The one way a document reaches the reader. Every entry point — file
@@ -57,7 +80,7 @@ const opens = createLatest();
  */
 async function open(doc: NewDoc, attempt: number): Promise<void> {
   const { openDoc, setError } = useAppStore.getState();
-  const contentHash = hashText(doc.content);
+  const contentHash = hashText(docIdentity(doc));
 
   let note: string | null = null;
   const restored = await restoreAnnotations(doc.id, contentHash).catch((e) => {

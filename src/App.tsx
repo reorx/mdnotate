@@ -20,6 +20,7 @@ import { ExportView } from './components/ExportView';
 import { Home } from './components/Home';
 import { Reader } from './components/Reader';
 import { SettingsView } from './components/SettingsView';
+import 'katex/dist/katex.min.css';
 import './App.css';
 import './find-highlight.css';
 
