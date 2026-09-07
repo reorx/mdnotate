@@ -1,4 +1,5 @@
 #[cfg(target_os = "macos")]
+mod channel;
 mod cli_install;
 mod default_app;
 
@@ -812,6 +813,12 @@ mod tests {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // A dev build gets its own identifier, and with it its own data directory
+    // and single-instance socket, before anything reads the config.
+    let mut context = tauri::generate_context!();
+    let identifier = channel::identifier(&context.config().identifier, channel::current());
+    context.config_mut().identifier = identifier;
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             if argv.len() > 1 {
@@ -884,7 +891,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application");
 
     app.run(|_app_handle, _event| {
