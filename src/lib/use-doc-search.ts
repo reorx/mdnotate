@@ -10,6 +10,7 @@ import {
   type SearchMatch,
   type TextSegment,
 } from './search';
+import { createFindPainter, type FindPainter } from './find-painter';
 import { NOT_ANNOTATABLE_CLASS } from './use-text-annotator';
 
 /**
@@ -21,11 +22,9 @@ import { NOT_ANNOTATABLE_CLASS } from './use-text-annotator';
  * Custom Highlight API, which colours text without an element of its own — so
  * the prose the annotator measures its character offsets against is left
  * exactly as react-markdown rendered it, and scrolling, resizing and changing
- * the type size need no bookkeeping at all.
+ * the type size need no bookkeeping at all. How the registry is driven is
+ * `find-painter.ts`'s business, and it is not the obvious way: see there.
  */
-
-const HIGHLIGHT_ALL = 'mdnotate-find';
-const HIGHLIGHT_ACTIVE = 'mdnotate-find-active';
 
 /** WebKit has had this since Safari 17.2 (macOS 14.2). Older systems keep the
  *  counter and the jumps and go without the colour, rather than the feature. */
@@ -211,6 +210,9 @@ export function useDocSearch({ containerRef, scrollRef, revision, enabled, onTak
   // megabytes of log is not something a reader who never searches should pay.
   const indexRef = useRef<SearchIndex | null>(null);
   const rangesRef = useRef<Range[]>([]);
+  // Registered on first use and mutated in place from then on; replacing the
+  // highlights is exactly what does not repaint on WebKit (`find-painter.ts`).
+  const painterRef = useRef<FindPainter<Range> | null>(null);
   // Mirrors of state the key handler and the steppers read synchronously.
   const activeRef = useRef(-1);
   const openRef = useRef(false);
@@ -224,24 +226,15 @@ export function useDocSearch({ containerRef, scrollRef, revision, enabled, onTak
     setResult(next);
   };
 
-  const paint = () => {
-    if (!PAINTS) return;
-    const ranges = rangesRef.current;
-    const active = activeRef.current;
-    // The current match is left out of the other highlight rather than layered
-    // over it: one range, one colour, and no reliance on how a browser resolves
-    // two highlights covering the same text.
-    CSS.highlights.set(HIGHLIGHT_ALL, new Highlight(...ranges.filter((_, i) => i !== active)));
-    const current = ranges[active];
-    if (current) CSS.highlights.set(HIGHLIGHT_ACTIVE, new Highlight(current));
-    else CSS.highlights.delete(HIGHLIGHT_ACTIVE);
+  const painter = () => {
+    if (!PAINTS) return null;
+    painterRef.current ??= createFindPainter<Range>(CSS.highlights, () => new Highlight());
+    return painterRef.current;
   };
 
-  const unpaint = () => {
-    if (!PAINTS) return;
-    CSS.highlights.delete(HIGHLIGHT_ALL);
-    CSS.highlights.delete(HIGHLIGHT_ACTIVE);
-  };
+  const paint = () => painter()?.paint(rangesRef.current, activeRef.current);
+
+  const unpaint = () => painter()?.clear();
 
   const reveal = (range: Range) => {
     const scroller = scrollRef.current;
