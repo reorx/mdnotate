@@ -10,7 +10,7 @@ default-members = ["."]
 
 [package]
 name = "mdnotate"
-version = "0.8.0"
+version = "0.9.0"
 description = "Markdown Annotate - read and annotate local Markdown files"
 authors = ["reorx"]
 edition = "2021"
