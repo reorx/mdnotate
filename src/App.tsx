@@ -18,6 +18,7 @@ import { useAppStore, type View } from './store';
 import { DocTitle } from './components/DocTitle';
 import { ExportView } from './components/ExportView';
 import { Home } from './components/Home';
+import { OpenDialog } from './components/OpenDialog';
 import { Reader } from './components/Reader';
 import { SettingsView } from './components/SettingsView';
 import './App.css';
@@ -36,6 +37,8 @@ function App() {
   const error = useAppStore((s) => s.error);
   const setError = useAppStore((s) => s.setError);
   const opening = useAppStore((s) => s.opening);
+  const openDialog = useAppStore((s) => s.openDialog);
+  const setOpenDialog = useAppStore((s) => s.setOpenDialog);
 
   // The whole of the theme's effect on the world: the class on <html>, the
   // window's own appearance, and the cache the next cold start reads. Runs
@@ -61,16 +64,22 @@ function App() {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
     (async () => {
-      // Register the listener before draining the pending document so a warm
+      // Register the listeners before draining the pending document so a warm
       // open arriving in between is never lost.
-      const stop = await listen<string>('open-doc', (event) => {
-        openSpec(event.payload).catch((e) => setError(String(e)));
-      });
+      const stops = [
+        await listen<string>('open-doc', (event) => {
+          openSpec(event.payload).catch((e) => setError(String(e)));
+        }),
+        // File ▸ Open… asks for the panel rather than opening anything itself:
+        // what a document may be named, and how it is reached, is decided here.
+        await listen('open-dialog', () => setOpenDialog(true)),
+      ];
+      const stopAll = () => stops.forEach((stop) => stop());
       if (cancelled) {
-        stop();
+        stopAll();
         return;
       }
-      unlisten = stop;
+      unlisten = stopAll;
       const pending = await invoke<string | null>('take_pending_doc');
       if (pending) await openSpec(pending);
     })().catch((e) => setError(String(e)));
@@ -78,7 +87,7 @@ function App() {
       cancelled = true;
       unlisten?.();
     };
-  }, [updateSettings]);
+  }, [updateSettings, setOpenDialog]);
 
   const reload = describeReload(doc);
 
@@ -95,6 +104,7 @@ function App() {
           reader — paints over anything reaching down into it. */}
       <header
         data-tauri-drag-region
+        inert={openDialog}
         className={`relative z-30 flex h-9 shrink-0 items-center gap-1.5 border-b border-neutral-200 px-2 ${isTauri ? 'pl-[72px]' : ''}`}
       >
         <button
@@ -172,7 +182,7 @@ function App() {
         </div>
       )}
 
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 flex-1 flex-col" inert={openDialog}>
         {doc && (
           // Still rendered while covered, so `inert` keeps it out of the tab
           // order and away from screen readers until it is on top again.
@@ -186,6 +196,10 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* Over everything, the header included — hence a switch of its own
+          rather than another `view`. */}
+      {openDialog && <OpenDialog />}
     </div>
   );
 }

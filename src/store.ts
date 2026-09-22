@@ -12,6 +12,11 @@ interface AppState {
   sidebarOpen: boolean;
   /** The annotation list on the right; hidden until there is something in it. */
   annotationsOpen: boolean;
+  /**
+   * The ⌘O panel. It covers everything, the header included, so it is a switch
+   * alongside `view` rather than a fifth view of its own.
+   */
+  openDialog: boolean;
   annotations: Annotation[];
   /** The persisted preferences, mirrored here so the UI reads them synchronously. */
   settings: Settings;
@@ -30,6 +35,7 @@ interface AppState {
   setError: (error: string | null) => void;
   setOpening: (opening: string | null) => void;
   setView: (view: View) => void;
+  setOpenDialog: (open: boolean) => void;
   toggleSidebar: () => void;
   toggleAnnotations: () => void;
   addAnnotation: (annotation: Annotation) => void;
@@ -54,6 +60,7 @@ export const useAppStore = create<AppState>((set) => ({
   view: 'home',
   sidebarOpen: true,
   annotationsOpen: false,
+  openDialog: false,
   annotations: [],
   settings: { ...DEFAULT_SETTINGS, theme: cachedTheme },
   resolvedTheme: resolveTheme(cachedTheme, systemPrefersDark()),
@@ -62,10 +69,18 @@ export const useAppStore = create<AppState>((set) => ({
   // A successful open clears whatever went wrong last time. Annotations arrive
   // with the document, not after it: the annotator seeds itself once, from what
   // the store holds the moment the reader mounts.
-  openDoc: (doc, annotations = []) => set({ doc, annotations, view: 'reader', error: null }),
+  //
+  // Closing the ⌘O panel here is the whole of that rule: every way into a
+  // document — a pasted path, the two halves of one, the clipboard, a recents
+  // entry, the system dialog, a file dragged in, even one double-clicked in
+  // Finder while the panel is up — ends in this one call, so none of them has
+  // to remember to get the panel out of the way.
+  openDoc: (doc, annotations = []) =>
+    set({ doc, annotations, view: 'reader', error: null, openDialog: false }),
   setError: (error) => set({ error }),
   setOpening: (opening) => set({ opening }),
   setView: (view) => set({ view }),
+  setOpenDialog: (openDialog) => set({ openDialog }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   toggleAnnotations: () => set((s) => ({ annotationsOpen: !s.annotationsOpen })),
   // Making an annotation is what reveals the list: an empty panel is worth no

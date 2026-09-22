@@ -2,6 +2,7 @@
 mod channel;
 mod cli_install;
 mod default_app;
+mod menu;
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -257,7 +258,7 @@ fn open_spec(app: &AppHandle, spec: String, doc_id: Option<String>, dropped_on: 
             raise(app, &label);
         }
         Target::Spawn => {
-            if let Err(e) = spawn_window(app, spec, doc_id) {
+            if let Err(e) = spawn_window(app, Some(Incoming { spec, doc_id })) {
                 eprintln!("mdnotate: could not open a window: {e}");
             }
         }
@@ -281,23 +282,37 @@ fn deliver(app: &AppHandle, label: &str, spec: String, doc_id: Option<String>) {
     let _ = app.emit_to(label, "open-doc", spec);
 }
 
-/// Open another window on the document.
-fn spawn_window(app: &AppHandle, spec: String, doc_id: Option<String>) -> tauri::Result<()> {
+/// How a window about to be opened appears in the registry.
+///
+/// A window opened on nothing — which is what ⌘N asks for — must **not** be
+/// marked `taken`. It is precisely the "still on the home screen" window of
+/// `choose_target`'s second rule: the next document double-clicked in Finder
+/// belongs in it, not in a third window opened beside it.
+fn spawn_entry(doc: Option<Incoming>) -> WindowEntry {
+    match doc {
+        Some(Incoming { spec, doc_id }) => WindowEntry {
+            doc_id,
+            taken: true,
+            ready: false,
+            pending: Some(spec),
+        },
+        None => WindowEntry::default(),
+    }
+}
+
+/// Open another window, on a document or on the home screen.
+fn spawn_window(app: &AppHandle, doc: Option<Incoming>) -> tauri::Result<()> {
     let label = format!(
         "doc-{}",
         app.state::<NextLabel>().0.fetch_add(1, Ordering::Relaxed)
     );
     // The entry has to exist before the window does: the webview starts up on
     // its own schedule and asks for its document the moment it can.
-    app.state::<Windows>().0.lock().unwrap().insert(
-        label.clone(),
-        WindowEntry {
-            doc_id,
-            taken: true,
-            ready: false,
-            pending: Some(spec),
-        },
-    );
+    app.state::<Windows>()
+        .0
+        .lock()
+        .unwrap()
+        .insert(label.clone(), spawn_entry(doc));
 
     // Cloned from the window in the config, so that a second window is the
     // first one in every respect that was configured — overlay title bar,
@@ -382,6 +397,40 @@ fn raise(app: &AppHandle, label: &str) {
     if let Some(window) = app.get_webview_window(label) {
         let _ = window.unminimize();
         let _ = window.set_focus();
+    }
+}
+
+/// File ▸ New Window: a window sitting on the home screen. Cascaded, labelled
+/// and permitted exactly as a window opened on a document is — the only
+/// difference is that it holds nothing, and so is where the next document
+/// arriving from outside will land.
+///
+/// Building a window has to happen on the main thread on macOS, and a menu
+/// event is not promised to be delivered on one.
+fn new_window(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Err(e) = spawn_window(&handle, None) {
+            eprintln!("mdnotate: could not open a window: {e}");
+        }
+    });
+}
+
+/// File ▸ Open…: not a system file dialog, but a note to the frontend to show
+/// its own panel — the paths this app is opened by are mostly pasted or built
+/// from a remembered directory, and a file dialog can reach neither those nor
+/// another machine. The system dialog is still there, one click into the panel.
+///
+/// `emit_to` rather than `emit`, for the reason `deliver` uses it: a broadcast
+/// would put a panel up in every window at once.
+fn open_dialog(app: &AppHandle) {
+    match front_window(app) {
+        Some(window) => {
+            let _ = app.emit_to(window.label(), "open-dialog", ());
+        }
+        // No windows left to ask — on macOS the app outlives the last one. A
+        // new window is all that is wanted here: its home screen *is* the panel.
+        None => new_window(app),
     }
 }
 
@@ -681,7 +730,7 @@ fn start_window_drag(window: tauri::Window) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{choose_target, modified_millis, Target, WindowState};
+    use super::{choose_target, modified_millis, spawn_entry, Incoming, Target, WindowState};
 
     /// The unit is the thing worth pinning down: seconds where milliseconds were
     /// meant would read back as a date in 1970 without failing anywhere.
@@ -809,6 +858,41 @@ mod tests {
             Target::Deliver("doc-1".into())
         );
     }
+
+    /// The other half of `an_empty_window_is_not_spoken_for`, stated from the
+    /// routing side: a window opened by ⌘N is where the next double-clicked
+    /// document goes, rather than a reason to open a third one.
+    #[test]
+    fn a_window_opened_from_the_menu_is_where_the_next_document_goes() {
+        let windows = [window("doc-1", None), window("main", Some("file:/a.md"))];
+        assert_eq!(
+            choose_target(&windows, Some("file:/b.md"), None),
+            Target::Deliver("doc-1".into())
+        );
+    }
+
+    /// The one thing in all of this that can go wrong without saying anything.
+    /// Marked `taken`, a window opened by ⌘N stops being "the empty one", and
+    /// the next document double-clicked in Finder quietly opens a window of its
+    /// own beside it — no error, nothing in the log, just one window too many.
+    #[test]
+    fn an_empty_window_is_not_spoken_for() {
+        let entry = spawn_entry(None);
+        assert!(!entry.taken);
+        assert!(entry.pending.is_none());
+        assert!(entry.doc_id.is_none());
+    }
+
+    #[test]
+    fn a_window_opened_on_a_document_carries_it() {
+        let entry = spawn_entry(Some(Incoming {
+            spec: "/a.md".into(),
+            doc_id: Some("file:/a.md".into()),
+        }));
+        assert!(entry.taken);
+        assert_eq!(entry.pending.as_deref(), Some("/a.md"));
+        assert_eq!(entry.doc_id.as_deref(), Some("file:/a.md"));
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -820,6 +904,13 @@ pub fn run() {
     context.config_mut().identifier = identifier;
 
     let app = tauri::Builder::default()
+        .menu(menu::build_menu)
+        .on_menu_event(|app, event| match menu::menu_action(event.id().0.as_str()) {
+            Some(menu::MenuAction::NewWindow) => new_window(app),
+            Some(menu::MenuAction::OpenFile) => open_dialog(app),
+            // Every predefined item — quit, close, copy — arrives here too.
+            None => {}
+        })
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             if argv.len() > 1 {
                 // argv comes from the second instance; resolve relative paths

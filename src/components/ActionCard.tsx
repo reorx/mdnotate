@@ -37,18 +37,27 @@ export function ActionCard({
 export const CARD_INPUT =
   'min-w-0 rounded border border-neutral-300 bg-page px-2 py-1 text-[12px] text-neutral-700 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none';
 
-/** A secondary line under an ActionCard's label. */
+/**
+ * A secondary line under an ActionCard's label, indented to line up under it.
+ * `indent` is a prop rather than something the caller overrides by class:
+ * whether `pl-0` or `pl-6` wins comes down to their order in the stylesheet,
+ * which is not something to build a layout on.
+ */
 export function CardNote({
   tone = 'muted',
+  indent = true,
   className = '',
   children,
 }: {
   tone?: 'muted' | 'error';
+  indent?: boolean;
   className?: string;
   children: ReactNode;
 }) {
   const color = tone === 'error' ? 'text-red-600' : 'text-neutral-500';
-  return <p className={`mt-1.5 pl-6 text-[12px] leading-snug ${color} ${className}`}>{children}</p>;
+  return (
+    <p className={`mt-1.5 text-[12px] leading-snug ${indent ? 'pl-6' : ''} ${color} ${className}`}>{children}</p>
+  );
 }
 
 /** An ActionCard's right-hand button. `primary` is the one that opens something. */

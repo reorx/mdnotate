@@ -29,7 +29,9 @@ src/lib/          纯逻辑 + hook：annotations（数据模型、失效判定�
                   clipboard、use-text-annotator（recogito 封装）、
                   use-select-all（⌘A 选中范围）、settings、theme（偏好解析与落地）、
                   default-app、tauri-env、sample-doc
-src/components/   Home（首页）、OpenFileCard、PrefixCombobox（prefix 输入框 + 补全下拉）、
+src/components/   Home（首页）、OpenFileCard、PathEntry（路径输入 + prefix/suffix 两个表单，
+                  首页卡片与 ⌘O 面板共用这一份）、PrefixCombobox（prefix 输入框 + 补全下拉）、
+                  OpenDialog（⌘O 的打开面板）、
                   ClipboardCard、RecentList、DefaultAppCard、
                   ActionCard（首页卡片共用的壳 + CardNote/CardButton/CARD_INPUT）、
                   Reader（Markdown + 目录 + 标注容器）、Toc、AnnotationList、AnnotationPopup、
@@ -37,7 +39,8 @@ src/components/   Home（首页）、OpenFileCard、PrefixCombobox（prefix 输�
                   ExportView、SettingsView
 src/store.ts      zustand 全局状态
 src-tauri/src/    lib.rs（文件打开路由 + 多窗口路由 + commands + SQLite migration，
-                  含 choose_target 的 #[cfg(test)] 单测）、
+                  含 choose_target / spawn_entry 的 #[cfg(test)] 单测）、
+                  menu.rs（在 Tauri 默认菜单上补 File ▸ New Window / Open…）、
                   channel.rs（debug 构建换 identifier，dev 与正式版的数据 / socket 由此分开）、
                   default_app.rs（LaunchServices FFI）、
                   cli_install.rs（把 mdnotate 命令链到 PATH 上）、main.rs
@@ -51,8 +54,9 @@ src-tauri/cli/    `mdnotate` 命令，独立 crate（见「mdnotate CLI」一节
 skills/           两个 Agent Skill（/mdnotate 与 /mdnotate-last），
                   用前要 symlink 到 ~/.claude/skills，见 skills/README.md
 tests/            vitest 行为测试，只覆盖 src/lib 的纯逻辑
-                  （Rust 侧的纯规则用 cargo test，见 lib.rs / default_app.rs / cli/）
-                  唯一的例外是 ime-keys.dom.test.tsx，见「键盘按键」一节
+                  （Rust 侧的纯规则用 cargo test，见 lib.rs / menu.rs / default_app.rs / cli/）
+                  两个例外：ime-keys.dom.test.tsx（见「键盘按键」一节）和
+                  open-dialog.test.ts（store 的一条规则，见「菜单」一节）
 kb/               知识库（sessions / plans / notes / docs …）
 ```
 
@@ -80,6 +84,9 @@ pnpm build:signed  # scripts/build-signed.sh：构建 + Developer ID 签名 + �
 - **文件打开路由**：macOS `RunEvent::Opened`、argv、single-instance 转发、窗口 DragDrop 四条路径全部收敛到 `lib.rs` 的 `open_spec()`，由它决定**去哪个窗口**（见下条）。送达有两条腿：webview 还没起来的窗口只能把 spec 留在它自己的 `pending` 槽里等它来取，已经起来的直接 `emit_to`（**不是 `emit`** —— 广播会让每个窗口都换文档）。前端必须**先注册 listener 再 drain pending**（`take_pending_doc`），而 drain 这个动作同时就是「我在听了」的登记，两件事在同一把锁里完成，所以不存在「刚放进槽、窗口已经取完」的缝。single-instance 的 `argv[1]` 是相对路径，要用回调的 `cwd` 拼接。**事件载荷不是纯路径，而是 `doc-locator` 能读的 spec**：绝对路径、`host:path`、或整条 `mdnotate://` 链接。
 - **一个文档一个窗口**：外部打开（Finder 双击 / `open` / 链接 / argv）遵循三条规则，纯逻辑是 `choose_target()`，有 `cargo test` 覆盖：**①已经开着这个文档的窗口 → 送回那个窗口**（两个窗口读同一文档会往同一批标注行里各写各的，互相看不见对方，这是必须避掉的数据打架）；**②还停在首页的空窗口 → 就地填进去**；**③否则开新窗口**，label `doc-N`（`main` 来自 config，N 从 1 递增且不复用），位置从最前面那个窗口 `+28px` 级联，撞到工作区边缘就回到左上角重来。拖拽是例外：丢在哪个窗口就在哪个窗口开（规则①仍优先）。窗口内的入口（Recent / 对话框 / 路径框 / 剪切板）一律原地替换，否则窗口只增不减。
 - **再次打开 = 刷新**：规则①送回去的是完整的一次打开，不是单纯聚焦 —— 文件会重读，所以在别处编辑过的文档双击一下就能看到新内容（代价是滚动位置回到顶部，且内容真变了的话旧标注按既有的 `doc_hash` 规则被丢弃并提示）。正因为「已开着」和「空窗口」两条最后做的是同一件事，`Target` 只有 `Deliver` 和 `Spawn` 两个分支，没有单独的 `Focus`。
+- **菜单**：`src-tauri/src/menu.rs`，File 里是 `New Window ⌘N` / `Open… ⌘O` / — / `Close Window ⌘W`。做法是**在 `Menu::default()` 上打补丁**（找到 text 为 `"File"` 的 submenu 再 `insert_items(.., 0)`），不是整个重建 —— 重建就要自己记得带上 `WINDOW_SUBMENU_ID` / `HELP_SUBMENU_ID`（macOS 靠这两个 id 把原生窗口列表和 Help 搜索框接上去）、自己拼 About 面板的 `package_info` + `copyright`、还会动到 Edit 子菜单里的 select all ⌘A（`use-select-all.ts` 正是在它存在的前提下工作的）。`"File"` 是 Tauri 硬编码的英文，所以**必须有兜底**：找不到就自己建一个 File 插到 index 1，升级 Tauri 后菜单栏值得瞄一眼（真变了会看到两个 File，而不是 ⌘O/⌘N 悄悄消失）。id 字符串只出现在 `menu.rs` 里，`run()` 只认 `MenuAction` enum。**建窗口那一支要包 `run_on_main_thread`** —— macOS 上建窗口必须在主线程，而 Tauri 没承诺 `on_menu_event` 在哪个线程投递（其它 `spawn_window` 调用点本来就在主线程，这是唯一需要顾虑的一处）。
+- **⌘N 开出来的空窗口不能标 `taken`**：注册表条目由纯函数 `spawn_entry()` 产出（有 `cargo test`）。空窗口正是 `choose_target` 规则②里「还停在首页的那个」，标成 `taken` 之后从 Finder 双击的下一篇文档会**另开一个窗口**而不是填进去 —— 不报错、日志里也没有，只是凭空多一个窗口。这是整块改动里唯一会静默出错的地方。
+- **⌘O 弹的是我们自己的面板，不是系统文件选择框**：`open_dialog()` 只往**当前窗口** `emit_to`（不是 `emit`，广播会让每个窗口都弹一个）一条 `open-dialog`，前端 `OpenDialog` 负责剩下的 —— 这个 app 打开文档的主力路径是「粘一条 `/a/path` 或 `host:path`」和 prefix+文件名，系统选择框够不着远端文件、也够不着记住的目录；系统选择框退居为落区的点击行为。一个窗口都没有时（macOS 上关完窗口 app 还活着）就开一个空窗口，首页本来就是这张面板。**面板不是第五种 view**，而是和 `view` 平行的开关 `openDialog`：它盖在一切之上，header 也包括在内。**「打开成功要关掉面板」只写在 `store.ts` 的 `openDoc` 里一处** —— 路径输入 / prefix+suffix / 剪切板 / Recent / 系统选择框 / 拖进来的文件 / 面板开着时从 Finder 双击送进来的文档，全都收敛到这一个调用，所以组件层一行相关代码都没有，也不用传 `onOpened` 回调（`tests/open-dialog.test.ts` 锁住这条）。面板里的落区只管高亮，**JS 绝不在 drop 里自己 `openSpec`** —— 文件早就由 Rust 的 `on_window_event` 打开了，再开一次就是开两遍。⌘O 打开的文档**原地替换当前窗口**（沿用「窗口内的入口一律原地替换」），想要新窗口就先 ⌘N。面板开着时 `useDocSearch` / `useSelectAll` 的 `enabled` 都要落下来，否则 ⌘F 会滚动背后的正文、⌘A 会选中背后的整篇文档；面板自己的 Esc 挂在 document 的**冒泡**阶段 —— `PrefixCombobox` 的 Esc 在下拉打开时会 `stopPropagation()`，capture 阶段会抢在它前面，把整个面板连人带下拉一起关掉。
 - **多窗口的三个必配套项**：① `capabilities/default.json` 的 `"windows"` 必须写成 `["main", "doc-*"]`（支持 glob），漏了新窗口就是**零权限**——SQL、对话框、`setTheme`/`setTitle` 全部静默失效；② `core:window:allow-set-title` 和 `allow-set-theme` 一样**不在 `core:default` 里**（`core:window:default` 只有只读那批）；③ 窗口关闭时 `WindowEvent::Destroyed` 要把注册表条目删掉，否则它会永远替一个没人在读的文档占位。
 - **窗口状态注册表**：Rust 侧 `Windows(Mutex<HashMap<label, WindowEntry>>)` 记录每个窗口装着哪个 docId、是否已被占用、webview 是否在听、以及待取的 spec —— **一把锁盖住全部四项是有意的**，拆成两把就会出现「窗口在决策中途起来了、文档被放进它已经取空的槽里」。前端这边是 `lib/window-doc.ts` 的 `announceDoc()`：读 store 里当前的 doc，汇报 docId 给 Rust 并把窗口标题设成文档名（标题栏是 Overlay 隐藏的，但 ⌘\` 切换和 Mission Control 靠它区分窗口）。它在 `open()` 成功后调一次，另一处是 `openLocator` 的 `catch`——**失败路径必须回报**：窗口在路由的那一刻就被乐观地标成「装着这个文档」了，读失败若不纠正，再打开同一个文档就只会聚焦这个根本没打开成功的窗口。（写在 `catch` 不是 `finally`：成功时 `open()` 已经报过，放 `finally` 会让每次正常打开都多一次 IPC + `setTitle`。）
 - **Rust 侧只认得本地文件的 docId**：`file_doc_id()` 是 `src/lib/recent-docs.ts` 里 `fileDocId` 的第二份实现（`file:<canonical>`），和扩展名列表属于同一类无法避免的跨语言重复。链接和 `host:path` 的语法只在 `doc-locator` 里，Rust 不解析，所以**它们算不出 docId、也就享受不到规则①**：同一个远端文档用链接开两次会得到两个窗口。这是明确接受的取舍。

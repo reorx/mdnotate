@@ -98,6 +98,7 @@ export function Reader() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const annotationsOpen = useAppStore((s) => s.annotationsOpen);
   const view = useAppStore((s) => s.view);
+  const openDialog = useAppStore((s) => s.openDialog);
   const annotations = useAppStore((s) => s.annotations);
   const typography = useAppStore((s) => s.settings.typography[format]);
   const panels = useAppStore((s) => s.settings.panels);
@@ -144,17 +145,17 @@ export function Reader() {
   });
 
   // ⌘F is a document-wide listener, so it has to know when the reader is not
-  // the thing on screen: settings and export are laid over it, and a key press
-  // meant for them must not scroll the page behind.
+  // the thing on screen: settings, export and the ⌘O panel are laid over it,
+  // and a key press meant for them must not scroll the page behind.
   const search = useDocSearch({
     containerRef: annotator.containerRef,
     scrollRef,
     revision: `${docId}#${contentHash}#${showingSource}`,
-    enabled: !!content && view === 'reader',
+    enabled: !!content && view === 'reader' && !openDialog,
     onTakeSelection: annotator.dismissPopup,
   });
 
-  useSelectAll({ targetRef: articleRef, enabled: !!content && view === 'reader' });
+  useSelectAll({ targetRef: articleRef, enabled: !!content && view === 'reader' && !openDialog });
 
   // Collect headings from the rendered DOM: assign slug ids and build the TOC.
   // DOM-derived so ids always match what the sidebar links to — which is why
