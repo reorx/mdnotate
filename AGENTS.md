@@ -1,186 +1,186 @@
 # mdnotate — Agent 参考卡
 
-**Markdown Annotate**：Tauri v2 桌面应用，作为本地 `.md` 文件的默认打开方式，用于阅读 + 划词高亮/评论，最后按模板导出为 Markdown 引用块。也能通过 `mdnotate://` 链接打开、以及经 ssh 读取远端机器上的文件。**只读，不提供编辑功能。**
+**Markdown Annotate**：Tauri v2 桌面应用（macOS），作为本地 `.md` 文件的默认打开方式，用于阅读 + 划词高亮/评论，最后按模板导出为 Markdown 引用块。也能通过 `mdnotate://` 链接打开、经 ssh 读取远端文件，并附带一个 `mdnotate` 命令行。**只读，不提供编辑功能。**
+
+本文件只放规则和指路；每条规则背后的完整理由在 `kb/docs/`（见文末索引）和代码注释里。
 
 ## 技术栈
 
-Tauri v2 + React 19 + Vite 7 + TypeScript + Tailwind v4 + zustand。pnpm 管理依赖，Node 版本由 `mise.toml` 固定为 24。Markdown 渲染用 react-markdown + remark-gfm；标注用 `@recogito/text-annotator`（SPANS renderer）。
+Tauri v2 + React 19 + Vite 7 + TypeScript + Tailwind v4 + zustand。pnpm 管理依赖，Node 由 `mise.toml` 固定为 24。Markdown 渲染用 react-markdown + remark-gfm；标注用 `@recogito/text-annotator`。存储是 `tauri-plugin-sql`（SQLite）+ `tauri-plugin-store`。
 
-扁平单包结构（**不是** monorepo）。
+扁平单包结构（**不是** monorepo）；Rust 侧是一个两成员的 cargo workspace（app + CLI）。
 
 ## 目录结构
 
 ```
-src/lib/          纯逻辑 + hook：annotations（数据模型、失效判定与导出序列化）、
-                  annotation-markers（评论图标的落点几何，纯规则）、
-                  popup-position（标注弹窗的落点几何，纯规则）、
-                  keys（按键谓词：组字期间的 Enter/Escape 不算数，纯规则）、
-                  search（⌘F 的规范化文本与匹配，纯规则）、find-painter（把命中涂进 CSS Highlight 注册表的唯一方式，纯规则）、
-                  template（导出模板渲染）、typography（阅读排版模型与校验）、toc（heading slug）、
-                  box-table（CLI 框线表格→GFM 表格的渲染前重写，只喂渲染器、不动 store）、
-                  recent-docs（文档模型 + 剪切板标题/预览等纯规则）、
-                  db（共享 SQLite 连接）、recents-db、annotations-db（两张表的 IO）、
-                  open-doc（打开文档的唯一入口）、annotate（改动标注的唯一入口）、
-                  window-doc（本窗口装着哪个文档，向 Rust 汇报 + 写窗口标题）、
-                  path-input（手输/粘贴路径的归一化规则）、
-                  path-prefix（prefix+suffix 的拼接与补全匹配，纯规则）、path-prefixes-db（记住的 prefix 的 IO）、
-                  doc-locator（本地/ssh/链接的语法与格式判定，纯逻辑）、
-                  doc-info（文档度量：字符数 / 字节数 / 修改时间的文案）、
-                  clipboard、use-text-annotator（recogito 封装）、
-                  use-select-all（⌘A 选中范围）、settings、theme（偏好解析与落地）、
-                  default-app、tauri-env、sample-doc
-src/components/   Home（首页）、OpenFileCard、PathEntry（路径输入 + prefix/suffix 两个表单，
-                  首页卡片与 ⌘O 面板共用这一份）、PrefixCombobox（prefix 输入框 + 补全下拉）、
-                  OpenDialog（⌘O 的打开面板）、
-                  ClipboardCard、RecentList、DefaultAppCard、
-                  ActionCard（首页卡片共用的壳 + CardNote/CardButton/CARD_INPUT）、
-                  Reader（Markdown + 目录 + 标注容器）、Toc、AnnotationList、AnnotationPopup、
-                  CommentMarkers（正文里的评论图标层）、StatusBar（正文底部状态栏）、
+src/lib/          纯逻辑 + hook，按主题：
+  打开文档     open-doc（唯一入口）、doc-locator（spec / 链接语法、格式判定）、path-input、
+               path-prefix、recent-docs（文档模型与 docId）、latest、window-doc、clipboard
+  标注         annotate（改标注的唯一入口）、annotations、use-text-annotator（recogito 封装）、
+               popup-position、annotation-markers、template（导出模板）
+  阅读器       search + use-doc-search + find-painter（⌘F）、use-select-all（⌘A）、
+               keys（按键谓词）、toc、doc-info、panels、window-drag、
+               box-table（CLI 框线表格 → GFM 表格，只喂渲染器、不动 store）
+  存储与设置   db（唯一连接）、recents-db / annotations-db / path-prefixes-db、
+               settings、theme、typography
+  其它         default-app、cli-install、tauri-env、sample-doc
+src/components/   Home 与它的卡片（OpenFileCard / ClipboardCard / DefaultAppCard / CliInstallCard，
+                  共用 ActionCard 的壳）、PathEntry + PrefixCombobox（首页与 ⌘O 面板共用）、
+                  OpenDialog、RecentList、Reader（正文 + 两侧栏）、Toc、AnnotationList、
+                  AnnotationPopup、CommentMarkers、FindBar、StatusBar、DocTitle、
                   ExportView、SettingsView
-src/store.ts      zustand 全局状态
-src-tauri/src/    lib.rs（文件打开路由 + 多窗口路由 + commands + SQLite migration，
-                  含 choose_target / spawn_entry 的 #[cfg(test)] 单测）、
-                  menu.rs（在 Tauri 默认菜单上补 File ▸ New Window / Open…）、
-                  channel.rs（debug 构建换 identifier，dev 与正式版的数据 / socket 由此分开）、
-                  default_app.rs（LaunchServices FFI）、
-                  cli_install.rs（把 mdnotate 命令链到 PATH 上）、main.rs
-src-tauri/cli/    `mdnotate` 命令，独立 crate（见「mdnotate CLI」一节）：
-                  cli（参数解析）、locator（本地/远端/链接判定 + urlencode）、
-                  remote（远端路径与那条 ssh 命令的字符串构造）、paths（/tmp 下的落点）、
-                  transcript（Claude Code JSONL 解析 + 最后一条消息提取）、
-                  session_discovery（四级 transcript 定位）、quote（从 lib.rs 抄的两个 helper）、
-                  system（System trait + RealSystem，唯一副作用缝）、
-                  dispatch（编排；行为规格表就是它的测试）、main（wiring）
-skills/           两个 Agent Skill（/mdnotate 与 /mdnotate-last），
-                  用前要 symlink 到 ~/.claude/skills，见 skills/README.md
-tests/            vitest 行为测试，只覆盖 src/lib 的纯逻辑
-                  （Rust 侧的纯规则用 cargo test，见 lib.rs / menu.rs / default_app.rs / cli/）
-                  两个例外：ime-keys.dom.test.tsx（见「键盘按键」一节）和
-                  open-dialog.test.ts（store 的一条规则，见「菜单」一节）
-kb/               知识库（sessions / plans / notes / docs …）
+src/store.ts      zustand 全局状态，每个窗口一份
+src/App.css       样式与深色调色板；find-highlight.css 单独装 ::highlight() 规则
+src-tauri/src/    lib.rs（文档路由、窗口注册表、commands、migrations）、menu.rs、
+                  channel.rs（dev identifier）、default_app.rs、cli_install.rs
+src-tauri/cli/    `mdnotate` 命令，独立 crate `mdnotate-cli`
+scripts/          build-cli.sh、build-signed.sh、bump-version.sh、release-status.sh
+skills/           /mdnotate 与 /mdnotate-last 两个 Agent Skill（用前要 symlink，见 skills/README.md）
+tests/            vitest，覆盖 src/lib 的纯逻辑
+kb/               知识库：docs / notes / sessions / plans
 ```
 
 ## 开发命令
 
 ```bash
-pnpm tauri dev     # 运行应用
-pnpm dev           # 只跑前端；无 Tauri 后端时的降级（Recent 走 localStorage，
-                   #   首页有 DEV-only 的「Open the sample document」入口）
+pnpm tauri dev     # 运行应用（dev 构建用独立的 identifier 与数据目录）
+pnpm dev           # 只跑前端，浏览器降级模式，用来迭代 UI
 pnpm test          # vitest
-cargo test --manifest-path src-tauri/Cargo.toml -p mdnotate-cli
-                   # mdnotate 命令的全部测试（不依赖 tauri，几秒跑完）
-./scripts/build-cli.sh
-                   # 单独构建 mdnotate 命令到 resources/bin；dev 与 build 都会自动调它
-pnpm tauri build   # 产出 .app 与 .dmg（无签名凭据时是 ad-hoc 产物，只能原地运行）
-pnpm build:signed  # scripts/build-signed.sh：构建 + Developer ID 签名 + 公证 + staple，
-                   #   凭据读 ~/Sync/apple-developer/secrets.env，产物可安装进 /Applications
+cargo test --manifest-path src-tauri/Cargo.toml                  # app 的 Rust 单测（要先有 dist/ 和构建好的 CLI）
+cargo test --manifest-path src-tauri/Cargo.toml -p mdnotate-cli  # CLI 的全部测试，几秒跑完
+./scripts/build-cli.sh   # 单独构建 CLI；dev 与 build 都会自动调它
+pnpm tauri build   # 产出 .app 与 .dmg，无签名凭据时是 ad-hoc 产物，只能原地运行
+pnpm build:signed  # 构建 + 签名 + 公证，产物可安装进 /Applications
 ```
 
-- ⚠️ **不要把 `pnpm tauri build` 的未签名产物拷进 /Applications**：它只有 linker-signed 的 ad-hoc 签名（resources 没有 seal，`codesign --verify` 必挂），macOS 会静默取消它作为文档 handler 的资格 —— 症状是 app 内显示已是 .md 默认应用、Finder 双击却打开别的 app，且「打开方式」选择器里 mdnotate 灰掉不可选；还会顶掉 brew 装的签名版。本地验证打包产物直接 `open src-tauri/target/release/bundle/macos/mdnotate.app`；要装进 /Applications 用 `pnpm build:signed` 的产物或 `brew reinstall --cask mdnotate`。
+## 开发约定
 
-## 关键设计与约束
+- 新功能走 BDD（先写 `tests/` 下的行为测试再实现），bug 修复走 TDD。
+- **纯逻辑必须放在 `src/lib/` 并有测试；组件层不写单测。** 两个例外：`ime-keys.dom.test.tsx`（回放浏览器的组字事件序列）和 `open-dialog.test.ts`（store 的一条规则）。
+- Rust 侧的纯规则用 `#[cfg(test)]` 单测，写在所在文件里。
+- TS / Rust 源码的注释是英文且很详尽，单个文件内的坑都写在原处：改一个文件前先读它的模块注释。
 
-- **开发方法论**：新功能走 BDD（先写 `tests/` 下的行为测试再实现），bug 修复走 TDD。纯逻辑必须放在 `src/lib/` 并有测试覆盖；组件层不写单测。
-- **文件打开路由**：macOS `RunEvent::Opened`、argv、single-instance 转发、窗口 DragDrop 四条路径全部收敛到 `lib.rs` 的 `open_spec()`，由它决定**去哪个窗口**（见下条）。送达有两条腿：webview 还没起来的窗口只能把 spec 留在它自己的 `pending` 槽里等它来取，已经起来的直接 `emit_to`（**不是 `emit`** —— 广播会让每个窗口都换文档）。前端必须**先注册 listener 再 drain pending**（`take_pending_doc`），而 drain 这个动作同时就是「我在听了」的登记，两件事在同一把锁里完成，所以不存在「刚放进槽、窗口已经取完」的缝。single-instance 的 `argv[1]` 是相对路径，要用回调的 `cwd` 拼接。**事件载荷不是纯路径，而是 `doc-locator` 能读的 spec**：绝对路径、`host:path`、或整条 `mdnotate://` 链接。
-- **一个文档一个窗口**：外部打开（Finder 双击 / `open` / 链接 / argv）遵循三条规则，纯逻辑是 `choose_target()`，有 `cargo test` 覆盖：**①已经开着这个文档的窗口 → 送回那个窗口**（两个窗口读同一文档会往同一批标注行里各写各的，互相看不见对方，这是必须避掉的数据打架）；**②还停在首页的空窗口 → 就地填进去**；**③否则开新窗口**，label `doc-N`（`main` 来自 config，N 从 1 递增且不复用），位置从最前面那个窗口 `+28px` 级联，撞到工作区边缘就回到左上角重来。拖拽是例外：丢在哪个窗口就在哪个窗口开（规则①仍优先）。窗口内的入口（Recent / 对话框 / 路径框 / 剪切板）一律原地替换，否则窗口只增不减。
-- **再次打开 = 刷新**：规则①送回去的是完整的一次打开，不是单纯聚焦 —— 文件会重读，所以在别处编辑过的文档双击一下就能看到新内容（代价是滚动位置回到顶部，且内容真变了的话旧标注按既有的 `doc_hash` 规则被丢弃并提示）。正因为「已开着」和「空窗口」两条最后做的是同一件事，`Target` 只有 `Deliver` 和 `Spawn` 两个分支，没有单独的 `Focus`。
-- **菜单**：`src-tauri/src/menu.rs`，File 里是 `New Window ⌘N` / `Open… ⌘O` / — / `Close Window ⌘W`。做法是**在 `Menu::default()` 上打补丁**（找到 text 为 `"File"` 的 submenu 再 `insert_items(.., 0)`），不是整个重建 —— 重建就要自己记得带上 `WINDOW_SUBMENU_ID` / `HELP_SUBMENU_ID`（macOS 靠这两个 id 把原生窗口列表和 Help 搜索框接上去）、自己拼 About 面板的 `package_info` + `copyright`、还会动到 Edit 子菜单里的 select all ⌘A（`use-select-all.ts` 正是在它存在的前提下工作的）。`"File"` 是 Tauri 硬编码的英文，所以**必须有兜底**：找不到就自己建一个 File 插到 index 1，升级 Tauri 后菜单栏值得瞄一眼（真变了会看到两个 File，而不是 ⌘O/⌘N 悄悄消失）。id 字符串只出现在 `menu.rs` 里，`run()` 只认 `MenuAction` enum。**建窗口那一支要包 `run_on_main_thread`** —— macOS 上建窗口必须在主线程，而 Tauri 没承诺 `on_menu_event` 在哪个线程投递（其它 `spawn_window` 调用点本来就在主线程，这是唯一需要顾虑的一处）。
-- **⌘N 开出来的空窗口不能标 `taken`**：注册表条目由纯函数 `spawn_entry()` 产出（有 `cargo test`）。空窗口正是 `choose_target` 规则②里「还停在首页的那个」，标成 `taken` 之后从 Finder 双击的下一篇文档会**另开一个窗口**而不是填进去 —— 不报错、日志里也没有，只是凭空多一个窗口。这是整块改动里唯一会静默出错的地方。
-- **⌘O 弹的是我们自己的面板，不是系统文件选择框**：`open_dialog()` 只往**当前窗口** `emit_to`（不是 `emit`，广播会让每个窗口都弹一个）一条 `open-dialog`，前端 `OpenDialog` 负责剩下的 —— 这个 app 打开文档的主力路径是「粘一条 `/a/path` 或 `host:path`」和 prefix+文件名，系统选择框够不着远端文件、也够不着记住的目录；系统选择框退居为落区的点击行为。一个窗口都没有时（macOS 上关完窗口 app 还活着）就开一个空窗口，首页本来就是这张面板。**面板不是第五种 view**，而是和 `view` 平行的开关 `openDialog`：它盖在一切之上，header 也包括在内。**「打开成功要关掉面板」只写在 `store.ts` 的 `openDoc` 里一处** —— 路径输入 / prefix+suffix / 剪切板 / Recent / 系统选择框 / 拖进来的文件 / 面板开着时从 Finder 双击送进来的文档，全都收敛到这一个调用，所以组件层一行相关代码都没有，也不用传 `onOpened` 回调（`tests/open-dialog.test.ts` 锁住这条）。面板里的落区只管高亮，**JS 绝不在 drop 里自己 `openSpec`** —— 文件早就由 Rust 的 `on_window_event` 打开了，再开一次就是开两遍。⌘O 打开的文档**原地替换当前窗口**（沿用「窗口内的入口一律原地替换」），想要新窗口就先 ⌘N。面板开着时 `useDocSearch` / `useSelectAll` 的 `enabled` 都要落下来，否则 ⌘F 会滚动背后的正文、⌘A 会选中背后的整篇文档；面板自己的 Esc 挂在 document 的**冒泡**阶段 —— `PrefixCombobox` 的 Esc 在下拉打开时会 `stopPropagation()`，capture 阶段会抢在它前面，把整个面板连人带下拉一起关掉。
-- **多窗口的三个必配套项**：① `capabilities/default.json` 的 `"windows"` 必须写成 `["main", "doc-*"]`（支持 glob），漏了新窗口就是**零权限**——SQL、对话框、`setTheme`/`setTitle` 全部静默失效；② `core:window:allow-set-title` 和 `allow-set-theme` 一样**不在 `core:default` 里**（`core:window:default` 只有只读那批）；③ 窗口关闭时 `WindowEvent::Destroyed` 要把注册表条目删掉，否则它会永远替一个没人在读的文档占位。
-- **窗口状态注册表**：Rust 侧 `Windows(Mutex<HashMap<label, WindowEntry>>)` 记录每个窗口装着哪个 docId、是否已被占用、webview 是否在听、以及待取的 spec —— **一把锁盖住全部四项是有意的**，拆成两把就会出现「窗口在决策中途起来了、文档被放进它已经取空的槽里」。前端这边是 `lib/window-doc.ts` 的 `announceDoc()`：读 store 里当前的 doc，汇报 docId 给 Rust 并把窗口标题设成文档名（标题栏是 Overlay 隐藏的，但 ⌘\` 切换和 Mission Control 靠它区分窗口）。它在 `open()` 成功后调一次，另一处是 `openLocator` 的 `catch`——**失败路径必须回报**：窗口在路由的那一刻就被乐观地标成「装着这个文档」了，读失败若不纠正，再打开同一个文档就只会聚焦这个根本没打开成功的窗口。（写在 `catch` 不是 `finally`：成功时 `open()` 已经报过，放 `finally` 会让每次正常打开都多一次 IPC + `setTitle`。）
-- **Rust 侧只认得本地文件的 docId**：`file_doc_id()` 是 `src/lib/recent-docs.ts` 里 `fileDocId` 的第二份实现（`file:<canonical>`），和扩展名列表属于同一类无法避免的跨语言重复。链接和 `host:path` 的语法只在 `doc-locator` 里，Rust 不解析，所以**它们算不出 docId、也就享受不到规则①**：同一个远端文档用链接开两次会得到两个窗口。这是明确接受的取舍。
-- **冷启动的文档比窗口来得早**：Tauri 的 config 窗口是在它自己的 `setup()` 里建的，而 `setup()` 挂在 `RuntimeRunEvent::Ready` 上；macOS 双击文档启动 app 时 `application:openURLs:` **先于** Ready 到达。所以早到的文档不能当场路由（那时 `webview_windows()` 是空的，会开一个新窗口，然后 config 窗口再空着弹出来 —— 实测过的 bug），要先攒在 `ColdStart` 缓冲里，等 `.setup()`（Tauri 建完窗口才调）再逐个 `open_spec`。缓冲用 `Mutex<Option<Vec<_>>>`：`Some` 即「还在启动中」，标志位和缓冲区是同一个东西。
-- **多窗口下没有同步的两件事**：设置/主题改动只作用于当前窗口（各窗口 store 独立，重启后一致）；A 窗口打开文档不会刷新 B 窗口的 Recent 列表。数据库并发写没问题（sqlx 默认 WAL + 5s busy_timeout），每个 webview 各有一个连接池。
-- **URL scheme**：`mdnotate://open?path=<spec>`。**路径必须走 query 参数**——macOS 的 `application:openURLs:`（tao `app_delegate.rs`）会先把每条 URL 喂给 `url::Url::parse`，解析不了的直接丢弃且毫无提示，而 `mdnotate://host:path/…` 正是解析不了的那种（authority 里的 `:Sync` 被当成端口）。链接里的 `&` 和 `#` 必须写成 `%26` / `%23`，否则 query 被截断；`doc-locator` 检测到多余的 query key 或 fragment 会明确报错而不是打开半截路径。Rust 侧**不解析链接**，原样转发给前端，语法只在 `doc-locator` 里实现一次、测一次。
-- **ssh 远端文件**：spec 用 scp 写法 `host:path`（`host` 是 `~/.ssh/config` 里的 alias，冒号后相对于远端 home，`host:/abs` 才是绝对路径）。判定规则只有一条：**第一个 `/` 之前有没有冒号**——所以 `/notes/2026:08:11.md` 仍是本地文件。读取是 `lib.rs` 的 `read_remote_file`，直接 `/usr/bin/ssh -o BatchMode=yes -o ConnectTimeout=10 <host> cat -- '<quoted>'`：白捡整个 ssh 配置（alias / Include / ProxyJump / ControlMaster 复用），代价是必须自己做 shell 单引号转义。**这个 command 必须是 `#[tauri::command(async)]`**，普通同步 command 跑在主线程上，10 秒的 ConnectTimeout 会把窗口冻住。stdout 按 8MB 封顶读取，超了要 `kill()` 子进程——只停止读取会让 `cat` 卡在写满的管道上，`wait()` 跟着死锁。退出码 255 是 ssh 自己连不上（提示去终端跑一次 `ssh <host>`），其它退出码是远端 `cat` 的错误。
-- **ssh 的认证前提**：GUI 启动的 app 拿不到 shell 环境，但 macOS 的 launchd 会给每个进程注入 `SSH_AUTH_SOCK`，且用户 config 里的 `ControlMaster auto` + `ControlPersist yes` 让已有的 master socket 直接复用——已验证：`open mdnotate://…` 冷启动能读到远端文件。没有 agent 身份也没有 master socket 时 `BatchMode` 会立刻失败（不是挂起），这是有意的。
-- **文件关联与 scheme 注册**：`tauri.conf.json` 的 `bundle.fileAssociations` 与手写的 `src-tauri/Info.plist` 共同生效——`CFBundleDocumentTypes` 管 `.md` 关联，`CFBundleURLTypes` 管 `mdnotate://` scheme。两者都只在打包后的 .app 里生效。document type 是**两条**：一条按 `LSItemContentTypes`（daringfireball UTI）claim，一条只按 `CFBundleTypeExtensions` claim——macOS 规则是条目里有 `LSItemContentTypes` 就忽略同条目的扩展名列表，而 `.md` 的 UTI 绑定是机器相关的（见下条），缺了扩展名那条 mdnotate 会在别的 UTI 赢得绑定的机器上从 Finder「打开方式」选择器里灰掉。
-- **可打开的格式**：`.md/.markdown/.mdown/.mkd` 按 Markdown 渲染；`.txt/.text/.log/.json/.yaml/.yml/.toml/.ini/.conf/.csv/.tsv` 以纯文本原样显示（`Reader` 的 `.prose-plain`，等宽 + `pre-wrap`，标注照常可用，目录显示「No headings」）；其余一律在联网之前就拒绝。扩展名列表在 `doc-locator.ts`（有测试）和 `lib.rs` 各一份——后者是 DragDrop 在前端看到文件之前就要筛选，属于无法避免的重复，改动要同步。文件关联仍然只注册 `.md/.markdown`，不去抢 `.txt`。
-- **默认 App 状态**：空状态界面的 `DefaultAppCard` 显示 mdnotate 是否为 `.md` 默认打开方式。Rust 侧 `default_app.rs` 直接 FFI 调 LaunchServices（`LSCopyDefaultRoleHandlerForContentType` / `LSSetDefaultRoleHandlerForContentType` / `LSCopyApplicationURLsForBundleIdentifier`）。**UTI 不能硬编码**：`.md` 实际映射到哪个 UTI 是机器相关的——iA Writer / Typora 这类编辑器会**导出**自己的 markdown UTI（`net.ia.markdown` / `io.typora.markdown`）并可能赢得扩展名绑定，把默认 handler 设在 `net.daringfireball.markdown` 名下就会「读回来显示已是默认、Finder 双击却打开别人」（`mdls` 的 kMDItemContentType 是 Spotlight 缓存，可能显示旧绑定，别信它）。所以 `markdown_utis()` 用 `UTTypeCreatePreferredIdentifierForTag` 逐台机器解析 `.md`/`.markdown` 当前绑定的 UTI，设置时全部写入，`is_default` 要求全部指向自己。**关键：设置是异步且需用户确认的**——macOS 自己弹「Use "mdnotate" / Keep "X"」对话框，LS 调用立刻返回 `noErr` 且此时读回来仍是旧 handler（对不存在的 bundle id 也返回 `noErr`）。所以前端点完按钮进入 `awaiting`，轮询 `markdown_default_app_status` 等结果，超时才提示走 Finder ⌘I。macOS 26 上验证：未确认前无论新旧 API（`NSWorkspace.setDefaultApplication` 也一样）都不会改动关联。
-- **默认 App 的 dev 限制**：`tauri dev` 跑的是未打包二进制，`app_registered` 取决于系统里是否已注册过某个 mdnotate.app；要完整验证需 `pnpm tauri build` 后运行 .app。浏览器模式下 `default-app.ts` 有 DEV-only stub 便于调 UI。
-- **`mdnotate` CLI 是一个独立的 Rust crate**：`src-tauri/cli`，package 名 **`mdnotate-cli`** —— 不能叫 `mdnotate`，会和 GUI 二进制在同一个 target 目录撞名；命令叫什么由 `cli_install` 建的符号链接决定，与 cargo 名无关。`src-tauri/Cargo.toml` 的 `[workspace]` 把它列为成员，而 **`default-members = ["."]` 是关键**：`tauri dev` / `tauri build` 底下跑的是裸 `cargo build`，不该为它变慢。它**刻意不依赖 `mdnotate_lib`**（那会拖上整个 tauri/sqlx 依赖树，为了一个只调一次 `open` 的程序），所以 `shell_quote` / `last_line` 是从 `lib.rs` 抄过去的第二份（`cli/src/quote.rs`，注释指回出处），和 `OPENABLE_EXTENSIONS` 属于同一类明确接受的跨文件重复。依赖只有 serde/serde_json，open / ssh / defaults / date / hostname / ps 一律 `std::process::Command` 绝对路径调用 —— 与 `read_remote_file` / `default_app.rs` 的「问 OS 不问 crates.io」一致。
-- **走 Resources 而不是 `externalBin`**：产物是 `src-tauri/resources/bin/mdnotate`（**已 gitignore，是构建产物不是源文件**，旧的 `100755` 约定随 sh 脚本一起作废），经 `bundle.resources` 落到 `Contents/Resources/bin/mdnotate`。`externalBin` 唯一的好处是自动签名，但 tauri#11992（sidecar + 公证 → "The signature of the binary is invalid"）至今 open，且那条路一样要为两个架构各编一次再 `lipo`。**成立的依据是**：tauri-bundler 的签名扫描只覆盖 `Contents/{MacOS,Frameworks,Plugins,Helpers,XPCServices,Libraries}` 且 `max_depth(1)`，**不递归 Resources** —— Resources 里的 Mach-O 只被按哈希 seal、绝不会被重签，所以「先签好再让 tauri 打包」不会被外层非 deep 签名破坏。而公证要求 bundle 里**每一个** Mach-O 都有 Developer ID 签名 + hardened runtime + timestamp，所以这一步不能省，`build-signed.sh` 和 release workflow 的自查里各加了一条针对它的 `codesign -dvv`。
-- **`scripts/build-cli.sh` 必须挂在 `beforeBuildCommand` / `beforeDevCommand`，不能挂 `beforeBundleCommand`**：`tauri-build` 的 build script 在 **cargo 编译时**就校验 `bundle.resources` 里每一条路径存在（报 `resource path ... doesn't exist`），而 `beforeBundleCommand` 要到 cargo 编译**之后**才跑 —— 实测过，`beforeBundleCommand` 版本必挂。所以两条 before 命令都写成 `bash scripts/build-cli.sh && pnpm dev|build`；顺带确认了 **before 命令的 cwd 是仓库根目录**（不是 `src-tauri`）。脚本本身 `cd "$(dirname "$0")/.."`，从哪跑都一样。`MDNOTATE_CLI_TARGETS` 给逗号分隔的 triple 就逐个编再 `lipo`（release workflow 传两个架构），不给就只编宿主架构；有 `APPLE_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD` 就临时 keychain 导入 + `codesign --options runtime --timestamp`，没有就跳过。target 目录问 `cargo metadata` 要，不能写死 `src-tauri/target`（本机 `~/.cargo/config.toml` 把它指到了机器级共享目录）。
-- **`codesign --keychain` 不是隔离手段，别信它**：codesign 认的是**搜索列表**，`--keychain` 顶多算个提示。所以临时 keychain 必须真的 `security list-keychains -d user -s <原有的...> <临时的>` 放进搜索列表，签完再原样放回去（`build-cli.sh` 的 EXIT trap 干这件事，读不出原列表就宁可整个不动 —— 把搜索列表设空会让整台机器的钥匙串访问全瞎）。**这个坑本地是发现不了的**：开发机的 login keychain 里本来就有那张 Developer ID 证书，`--keychain` 指向一个空钥匙串照样签得出来，于是「本地通过」纯属碰巧；CI 上没有那份，就只剩一句没头没尾的 `error: The specified item could not be found in the keychain.` —— v0.7.0 第一次发版就是这么挂的。脚本里因此留了一条前置断言：签之前用**不带 keychain 参数**的 `find-identity` 再问一遍，问不到就说清是搜索列表的问题。想单独验这一段用 `tmp/verify-cli-signing.sh`（15 秒，另外还断言搜索列表被放回去了），不用等整个 `build-signed.sh`。
-- **CLI 做四件事，行为规格表就是 `dispatch.rs` 的测试**：①`mdnotate [file...]` —— 本地文件收齐了一次 `open -a <app> -- ...`、`host:path` 包成链接、`mdnotate://` 原样直传，**与旧 sh 逐条对齐**（链接遇到就开、文件末尾批量，次序都一样）；②`pbpaste | mdnotate` —— stdin 写成 `/tmp/mdnotate/local/clipboard/<ts>-<pid>.md` 再当普通文件打开（**不给 app 加内容通道**），**空的非 tty stdin 等同无参**、退回聚焦而不报错（cron / 重定向场景）；③`mdnotate -h <host> <file...>` —— 一条 ssh 把内容推到远端 `/tmp/mdnotate/<本机 hostname>/<文件名>` 再在那边 `mdnotate` 打开，**stdin 直接管进 ssh，本地一个临时文件都不落**；④`mdnotate last [-h host]` —— 从 Claude Code transcript 里抠出最后一条 assistant 消息。多文件推送沿用旧 sh 的「全部尝试、记住失败、最后统一 exit 1」。
-- **`-h` 是 host 不是 help**，帮助只剩 `--help` —— 所以缺参数的错误文案里**必须**指回 `--help`（老习惯会撞上来）。参数解析保留旧 sh 的两个怪癖：`--help` / `-v` / `--version` / `last` **只在第一个参数位**认（`mdnotate a.md --version` 打开一个叫 `--version` 的文件），且**第一个位置参数出现后停止选项识别**，不做 getopt 式重排。
-- **远端那条命令必须是一整个字符串、一次 `.arg()`**：ssh 会把 host 之后的全部参数用空格 join 再交给远端 shell（`lib.rs` 已记录的坑），拆成多个 `.arg()` 看着像 argv 实际不是。形状是 `mkdir -p '<dir>' && cat > '<path>' && env PATH="/usr/local/bin:$HOME/.local/bin:$PATH" mdnotate -- '<path>'`，PATH 前缀是**字面量**、`$HOME` 留给远端展开，**不要**复用 `cli_install::well_known_dirs()`（那个解析的是本机 `$HOME`）。远端装在别处 → exit 127，翻译成「去那台机器装一下」而不是原样透出。**跨调用同名文件直接覆盖是有意的**：远端 app 按规则①刷新同一窗口，正是想要的；只有同一次调用里的重名才自动 `-2`。`-h` 只收本地文件，`host:path` 和链接在**推送前**就报错。
-- **`last` 的 transcript 定位与提取移植自 plannotator**（`~/Code/plannotator/apps/hook/server/session-log.ts`，那边是对着几百份真 transcript 调出来的）。四级 fallback：祖先 PID 的 `~/.claude/sessions/<pid>.json` → 全量 sessions 按 cwd 取最新 `startedAt` → `projects/<slug>/` 按 mtime → 逐级父目录试 slug；**四级的结果全部返回成候选列表**、逐个读到有回复为止 —— 「找到文件」不等于「文件里有东西」，两种空的说法也不一样（找不到会话 vs 会话里还没有回复）。四件必须知道的事：①transcript 是**树**，`/rewind` 什么都不写、只是把下一条重新挂到更早的父节点上，按文件顺序倒着读会读到用户已经看不见的消息，所以要沿 `parentUuid` 走活跃分支；②`/compact` 之后活跃分支是个空的新根，**必须 fail open 退回文件顺序**，否则调用方会以为找错了文件而去翻更老的 session；③每一行都用 `serde_json::Value` 取字段而**不是**反序列化成 struct —— struct 会让任何一个字段的**类型**意外把整行静默丢掉，而静默丢行正是这里最不能出的错（`parentUuid` 只是最先想到的那个）；④slug 按 **UTF-16 code unit** 生成（Claude Code 是 JS 写的，BMP 外的字符是两个 `-`，按 Rust `char` 走会少一个、目录就找不到了）。砍掉的部分：droid/Factory、25 条候选列表、anchor、Windows 分支。
-- **CLI 的测试全在 cargo 里**：`cargo test -p mdnotate-cli`（111 条，CI 里单列一步跑 —— 不能用 `--workspace`，那会连 app crate 一起编，而 `tauri-build` 那时还找不到 `../dist`）。纯逻辑各模块自测，`dispatch.rs` 用 `FakeSystem` 记录调用序列逐行覆盖行为表；**重点断言往往是「没发生什么」**：`-h` 推送时 `write_file` 从未被调、参数被拒时 push/open 零调用。旧的 `tmp/test-cli-script.sh` 作废。cargo 够不着的只有一件事 —— 真 .app 里两跳符号链接的 `current_exe().canonicalize()`（macOS 的 `current_exe` 交回的是启动用的那条路径，也就是链接本身，所以这一步不能省），走 `tmp/smoke-cli.sh`。
-- **两个 Agent Skill 只说「跑完就停」**：`skills/mdnotate` 与 `skills/mdnotate-last`，各自只是一行 `` !`mdnotate …` `` 加一句叮嘱。和 plannotator 的同类 skill 不同的是**没有 JSON verdict 的分支** —— mdnotate 只读、打开即结束，什么都不回传，所以剩下的全部内容就是「别等回复、别自作主张接着干活」。Claude Code 不会发现仓库里的 `skills/`，用前要 `ln -s` 到 `~/.claude/skills/`（`skills/README.md` 里有那行命令）；链接而不是拷贝，`git pull` 就跟着更新。
-- **CLI 的安装是符号链接，且没有单独的修复动作**：`cli_install.rs` 把 `<dir>/mdnotate` 指向 bundle 里的那个二进制 —— 链接而不是拷贝，所以 app 一升级命令跟着新。`classify()` 用 `symlink_metadata` **先看链接本身**再 `canonicalize`，才能把「什么都没有」和「链接指向的 app 已被删」分开（跟着链接走的话两者一模一样，但要做的事不同）。五种状态里只有 `Ours` 算装好了，其余四种一律显示「未安装」并让 Install 按钮直接覆盖上去 —— **失效链接和指向别的副本的链接，重装就是修复**，这就是不做 Repair 按钮的理由；唯独**真实文件**拒绝覆盖（分不清是谁的，删错的代价远大于多一句报错）。提权**不预判而是兜底**：先直接建链接，只有拿到 `PermissionDenied` 才转 `osascript ... with administrator privileges` 重试 —— 提前按目录权限判断会撞上 TOCTOU，而且自定义目录归谁前端根本不知道。**这两个 command 必须 `#[tauri::command(async)]`**，和 `read_remote_file` 同一个理由：授权框可以在屏幕上挂任意久，同步 command 会把窗口冻死。AppleScript 的 `-128` 是「用户取消」，翻译成人话而不是当错误抛。**不引入跨语言的魔法字符串来区分取消**，那句人话进错误行就够了。
-- **CLI 卡片的两条状态规则**：`describeCliInstall` 里**已装好优先于一切** —— 哪怕当前这份 app 跑在 dmg 里（`removable`）或根本没打包（`unbundled`），先前装好的命令仍要能卸载。`appLocation` 只挡两种真会出事的：`tauri dev` 没有可链的二进制，`/Volumes/` 下的副本链接活不过弹出磁盘镜像。自定义目录必须存进 `settings.cliInstallDir`：两个固定目录是两侧都知道的常量、每次扫一遍即可，而用户手输的那个不记下来就再也找不回，重启后会误报「未安装」。
-- **拖拽窗口不能靠 tauri 自带的 `data-tauri-drag-region`**：macOS 26 (Tahoe) 上顶栏拖不动窗口，与「文件名居中」那次改动无关。tauri 的链路是 `drag.js` → **async** 的 `start_dragging` command → 事件循环 user message → tao 的 `drag_window`，跑到最后一步时 `NSApp.currentEvent` 已经变成 LeftMouseDragged，而 Tahoe 的 `performWindowDragWithEvent:` 对非「活的 LeftMouseDown」直接静默忽略（旧系统容忍过期事件，所以以前能拖）。替代方案是 `lib.rs` 的 `start_window_drag` + `lib/window-drag.ts`：**这个 command 必须是同步的**（同步 command 跑在主线程、mousedown 还在分发中），在光标当前位置合成一个新的 LeftMouseDown 再交给 `performWindowDragWithEvent:`；前端在 **capture 阶段**监听 mousedown，否则会被 drag.js 的 `stopImmediatePropagation` 饿死。双击不拦，留给 drag.js 变成最大化。`data-tauri-drag-region` 属性保留，现在由我们自己读。
-- **视图切换是覆盖而不是替换**：export / settings / home 以 `absolute inset-0` 的不透明层盖在 Reader 之上（`App.tsx` 的 `overlay`），**Reader 从不卸载** —— 否则回到文档时 scroll position、annotator 实例、渲染好的 markdown 全部从头再来（原来的三元切换正是这个 bug）。两个配套细节缺一不可：Reader 根节点的 `relative z-0` 建一个层叠上下文，不然 z-20 的标注弹窗会浮在覆盖层之上；被盖住时挂 `inert`（React 19 支持布尔属性），把整棵子树移出 tab 顺序和读屏。
-- **三栏布局不许横向滚动**：Reader 根节点必须带 `min-w-0` —— 它是外层 flex 的 item，`min-width: auto` 会让整行按「两侧栏 + 正文最长不可断行内容」的 min-content 撑开，整个窗口跟着横向溢出（曾经的 bug）。侧栏宽度存在 `settings.panels`（`lib/panels.ts` 管默认值与 clamp，160–480px），分隔线（`Reader` 的 `PanelResizeHandle`）就是拖拽手柄：拖动时写 store、松手才落盘，双击重置默认。侧栏另有 `max-w-[40%]` 上限，窗口再窄正文也至少留 20%。正文滚动容器是 `overflow-x-hidden`，超宽内容一律自己内部滚动 —— `pre` 本来就是，表格靠 ReactMarkdown 的 `components.table` 包一层 `overflow-x-auto`（只包 div 不动文本节点，标注偏移不受影响）。
-- **标注侧栏**：右侧的 `AnnotationList`，默认隐藏，`addAnnotation` 时自动打开（store 的 `annotationsOpen`），toolbar 最右的 `PanelRight` 是开关。条目按文档顺序 —— store 里的 annotations 本来就是排好序的，不要在组件里再排一次。点击用 recogito 的 `scrollIntoView(id, 滚动容器)` 跳转，**滚动容器要显式传**，库自己是从 annotator 容器往上找第一个真的在滚动的祖先。哪一条算 active 由两个来源合成：面板里点了谁、文本里打开了哪个 view 弹窗，后者优先（点高亮时 marker 要跟着走）。条目的引用文字是**素的**，不带正文里那层琥珀底 —— 一整列全是引用，刷成一片琥珀之后这个底色就不再意味着「这是高亮」了，只剩下嘈杂。哪条 active 由条目自己说：`border-amber-500` + `bg-amber-50` + 序号转 `amber-700`。有评论的条目在评论行首带同一个图标，**不放引用行末尾**：引用是 `line-clamp-3`，被截断时行尾的东西会跟着被裁掉。
-- **弹窗只有一种编辑态**：点已有高亮直接进评论输入框（没有只读态），底部左边 🗑、右边 ✕ / ✓，三个都是纯图标，所以 `title` 和 `aria-label` 两个都得给 —— 图标是它们唯一的名字（`IconButton` 把这件事包死，别再手写裸 `<button>`）。Enter 保存、Shift+Enter 换行、Esc 与点外部一律**丢弃**改动（和 draft 的行为对齐，`dismissPopup` 是两种 kind 共用的出口；Enter/Esc 的判定走 `lib/keys.ts`，见下条）。保存空串 = 退回纯高亮。新划的选区仍先给 Highlight / Annotate 两个按钮（数据层没有「annotate」这个词，只有 comment，改的只是 UI 文案）。
-- **键盘按键：不许在 keydown handler 里裸判 `e.key`，一律走 `src/lib/keys.ts`**（`isImeComposing` / `isSubmitEnter` / `isCancelEscape`）。理由是浏览器在输入法组字期间**照常派发 keydown**——Enter 是「把预编辑文本上屏」、Escape 是「丢弃候选词」、方向键是「走候选列表」，它们和普通按键长得一模一样。只判 `key` 的评论框会在用户打中文打到一半时把半句话存下来（Enter），或者把整条评论丢掉（Escape）。两个必须知道的形状差异，也正是这个模块存在的理由：① **React 合成事件没有 `isComposing`**——属性和类型都不存在，所以 `!e.isComposing` 恒为 true，写了等于没写且编译期不报错，必须读 `e.nativeEvent.isComposing`；② 绑在 `document` 上的 listener 拿到的是原生事件，`isComposing` 就在事件自己身上、没有 `nativeEvent` 可读。谓词吃结构化类型，两种形状通吃，并额外兜底历史约定 `keyCode === 229`。**③ 而在 WKWebView 上，光看事件根本不够**：macOS 的 WebKit 把 `compositionend` 派发在导致它的那个 keydown **之前**，所以确认候选词的 Enter 到达时 `isComposing` 已是 false、`keyCode` 是普通的 13，事件上没有任何东西能把它和用户真心要提交的 Enter 分开。修正顺序的开关 `InputMethodUsesCorrectKeyEventOrder`（`PLATFORM(MAC)`）2026-06 被关了回去，trunk 至今 `default: false`，而这正是我们唯一的引擎。所以 `main.tsx` 必须调一次 `watchComposition()`：document 级 capture 监听组字，`compositionend` 后延迟 50ms 才清标志，那一窗口内的按键仍算输入法的。**删掉这一行，评论框在真机上就退回原来的 bug，而所有只看事件的测试依然全绿**。**document 级的单键快捷键同样要判**：焦点在输入框里组字时它们照样会收到事件（`DocTitle` 的 Esc 关面板、`use-doc-search` 的 Esc 关搜索栏都踩过）。带修饰键的组合（⌘A / ⌘F / ⌘G）不在此列——输入法不消费它们，且 `use-select-all` 本来就对 input/textarea 提前 return。handler 顶部 return 过一次 `isImeComposing` 之后，同一个 handler 里再比较 `e.key` 是可以的（`PrefixCombobox` 就是这么写的）。背景与实测数据见 `kb/notes/2026-08-16-ime-enter-escape.md`。
-- **`tests/ime-keys.dom.test.tsx` 是唯一的组件测试，且刻意只有这一个**：「组件层不写单测」的例外仅限于「浏览器到底派发了什么」这类事实——jsdom 尊重 `KeyboardEventInit.isComposing`，所以整条组字序列（`compositionstart` → `change` → `keydown{isComposing:true}` → `compositionend`）可以原样回放，不需要真机输入法。环境靠文件顶部的 `@vitest-environment jsdom` docblock 单独切换，全局仍是 node。要测的是别的东西就回到 `src/lib/` + 纯函数那条路。
-- **弹窗自己决定坐落在哪**：`use-text-annotator` 只交出「锚点矩形 + 可视区」（`anchor` / `bounds`，都是容器坐标，开弹窗那一刻各读一次），落点是 `popup-position.ts` 的 `placePopup()`（纯逻辑，有测试）：下方装得下就挂在下方，装不下翻到选区上方，两边都不够就取空间大的那边、再把整张卡片钳进可视区 —— 宁可盖住一点正文，也不留半截弹窗。卡片尺寸是 `useLayoutEffect` **量出来的**而不是写死的：工具栏只有两个按钮那么宽、编辑器固定 300，而且点 Annotate 从工具栏换成编辑器时高度会变，量完再定位，所以「量之前那一帧」永远不会被画出来。原先的 `POPUP_WIDTH = 260` 常量已删 —— 它和组件里的 `w-[260px]` 本来就是同一个值的两份。可视区来自 `scrollRef`（`useTextAnnotator` 的必填 option，`scrollToAnnotation` 也用同一个，「谁是滚动容器」只声明一次）。
-- **正文里的评论图标是自己画的**：`CommentMarkers` 是 annotator 容器内独立的一层，**不能塞进库的高亮层** —— 那层每次重画都 `innerHTML = ''` 整个重建，而且整层带 `mix-blend-mode`，图标的颜色会被混掉。同步靠 `anno.renderer.on('onRedraw')`（公开 API，滚动 / resize / 状态变化后都会发），位置从 `[data-annotation]` span 的 rect 现算，落点规则在 `annotation-markers.ts`（最下面那行的最右端，有测试）。两个必配套项：① `onRedraw` 每个滚动帧都发，所以 setState 前必须过 `sameMarkers` 比一次，否则滚动全程重渲染；② 加/删评论不移动任何矩形，光靠 `onRedraw` 的时序不保险，另挂一个 `annotations` 变化的 effect 兜底。图标层必须带 `not-annotatable`：库的 pointerup 里有一条「target 在 `.not-annotatable` 内就直接返回、不清空选区」，靠它点图标才能 `setSelected(id)` 把弹窗开起来。
-- **⌘F 搜索一个 DOM 节点都不改**：命中不是插 `<mark>`、也不是自绘矩形层，而是把 `Range` 交给 **CSS Custom Highlight API**（`CSS.highlights.set(name, new Highlight(...ranges))` + `find-highlight.css` 里的 `::highlight()`）。插元素会动到标注赖以定位的渲染文本，自绘矩形要在每个滚动帧重算 —— 这条路两样都不用，滚动 / resize / 改字号全部白捡。代价是需要 Safari 17.2+（macOS 14.2+），`PAINTS` 特性检测不到时保留计数与跳转、只是不涂色（`FindBar` 会亮一个警告图标）。**当前命中是从「全部命中」那个 Highlight 里剔掉、单独放进第二个**，不靠 `Highlight.priority` 分层 —— 少赌一条浏览器实现细节，也不会出现半透明蓝叠实心蓝的脏色。**`::highlight()` 的规则必须待在 `find-highlight.css` 而不是 `App.css`**：Tailwind 对自己产物跑的那趟 Lightning CSS 不认识这个伪元素，规则会原样透传但每次构建刷四条警告。同理不要给它用 `--find-*` 变量 —— highlight 伪元素继不继承自定义属性是这个 API 各家唯一没谈拢的地方，深浅两套直接写字面值 + `.dark` 覆盖。**驱动注册表的方式在 `find-painter.ts`，且不是显而易见的那种**：两个 `Highlight` 对象只 `CSS.highlights.set()` 一次，之后每次涂色 / 清除都是对象自己的 `.clear()` / `.add()`，**绝不** `delete()`、也绝不用已有的名字再 `set()` 一个新对象 —— macOS 自带的 WebKit 上这两个操作**不重绘**，刚失去高亮的那些字会一直蓝着直到别的什么把那块重画（清空查询、关闭搜索栏都会留下一页残留蓝，2026-09-17 在 macOS 26 实测，复现页在 `tmp/2026-09-17-find-highlight-repaint/`；WebKit 319154@main 于 2026-08 修了，但没进当时的系统）。`tests/find-painter.test.ts` 用假注册表锁住「只 set 两次、零 delete」这条规则，但它测不出重绘本身，改这块请去 Safari 开复现页看。
-- **搜索匹配跑在「规范化文本」上，不是 DOM 原文**：`search.ts` 把文本节点折成一条 `text` —— 连续空白折成单个空格、**块边界写一个 `\n`** —— 并给每个规范化字符记下它代表的原始 `starts`/`ends`。两条规则各解决一个问题：①markdown 段内软换行在 DOM 里是真实的 `\n`，不折叠就搜不到 `quick brown`；②相邻两个块之间**一个分隔字符都没有**（React 不产生空白文本节点），不插哨兵就会把 `…fox` 和 `bar…` 连起来误命中 `foxbar`。query 同样只折叠不 trim（前导空格是用户要找的东西的一部分），折叠后绝不含 `\n`，所以天然跨不过块边界。大小写折叠**逐字符做且校验长度不变** —— `'İ'.toLowerCase()` 是两个 code unit，整串 `toLowerCase()` 会让它之后的偏移集体错位、高亮到别的句子。纯逻辑全在 `search.ts`（有测试），DOM 那半在 `use-doc-search.ts`：TreeWalker 按 recogito 同一条 `.not-annotatable` 规则收集段表（我们自己的评论图标层和弹窗就在同一个容器里），命中靠二分段表转 `Range`；**不用库的 `reviveTextSelector`**，它每次都从容器头部重走一遍树，几百个命中就是 O(n²)。「从当前视口往下的第一个命中」也是二分（文档流里 `top` 单调不减），一次 layout 读一个 probe。索引**在第一次搜索时才建**，换文档置空 —— 八兆的日志不该让一个从不搜索的读者付这笔钱；命中数封顶 `MAX_MATCHES`（5000），计数显示 `5000+`。
-- **搜索栏必须在滚动容器外面**：`Reader` 给 scroller 套了一层 `relative flex-col` 专门装 `FindBar`，放进滚动容器里它会跟着正文滚走。⌘F 是 document 级监听，所以要靠 `enabled`（`view === 'reader'`）判断阅读器是不是真的在最上面 —— export / settings 盖着的时候按 ⌘F 不该滚动背后的页面。焦点在 `<textarea>`（标注评论框）里时 ⌘F 与 Esc 一律让路：那里的半截评论不是我们该丢的。**只有真的取走了正文选区才 `dismissPopup()`** —— 划词会立刻建一个标注 draft，⌘F 把它拿去当搜索词就等于放弃那个 draft；但没选区的 ⌘F 不该顺手清掉别人正在写的评论。
-- **⌘A 必须自己实现，且必须在 capture 阶段**：`lib/use-select-all.ts`。两件事要一起解决 —— 浏览器原生的 select all 会连目录、标注列表、工具栏一起选走（复制下来全是垃圾）；而**库自己也绑了 ⌘A**（`text-annotator.es.js` 里 `be = "⌘+a"`，回调等下一个 `selectionchange` 再 100ms 后把整篇选区加成一条 annotation 并选中它），也就是按一下 ⌘A 会弹出「要不要把整篇文档高亮」的 draft 弹窗。库用 hotkeys-js 注册在 document 的**冒泡**阶段，所以我们在 **capture** 阶段拦、`stopImmediatePropagation()` 把这个键整个拿走。`preventDefault()` 是**另一个决定**：只有阅读器在最上面时才归我们（overlay 盖着时只掐库、不拦默认，原生 select all 照常在覆盖层里工作 —— 背后的 Reader 是 `inert`，按规范不可被选中）。焦点在 input/textarea 里则完全放行（hotkeys-js 默认也会跳过这些 target，所以库那边同样不会触发）。选区目标是 `<article>` 而不是 annotator 容器：后者还装着评论图标层和弹窗。**残留**：⌘A 之后库内部仍留着一个「待提交选区」，此时右键会把它提交成整篇高亮 —— 与「鼠标划一段再右键」是同一条既有路径，明确接受。
-- **点正文要能拿到焦点**：滚动容器带 `tabIndex={-1}` + `outline-none`。recogito 本来就会给标注容器打 `tabindex="-1"`，但源码视图下 annotator 是销毁的，所以这一份必须是我们自己的。顺带的好处是空格 / PageDown / 方向键这才滚得动正文（在此之前整个正文区没有任何可聚焦元素，键盘根本滚不动）。
-- **源码视图**：状态栏最右的眼睛按钮，`Reader` 的局部 state（换文档重置回渲染视图，不进 settings —— 看一眼源码不该变成下一篇文档的默认阅读方式），纯文本文档不显示这个按钮（渲染视图本来就是原文）。切过去就是把 annotator `enabled` 翻成 false，整个销毁：划词不再建 draft、高亮和评论图标一起消失；切回来 `setAnnotations` 从 store 重建。**三个必须跟着视图模式走的依赖，漏一个就是静默 bug**：① `useDocSearch` 的 `revision`（原来叫 `content`）—— 搜索索引缓存的是**真实 DOM Text 节点**，切视图 content 没变但节点全换了，只按 content 重置会让搜索指向已经不在文档里的节点；② 建 TOC 的 effect —— heading id 是扫渲染后的 DOM 打上去的，切回来 heading 是**全新元素、没有 id**，不重跑就再也跳不动；③ 滚动 spy —— 源码视图下每次 heading 查找都落空，会把 TOC 第一条一直点亮。两个侧栏在源码视图下包一层 `inert` + `opacity-50`（`PanelContent`）：点击天然无效，而 `inert` 连带的 `pointer-events` 穿透让侧栏自己还能滚。
-- **状态栏**：`StatusBar` 在正文列底部、**滚动容器外面**（和 `FindBar` 同一层 `flex-col`）。字数与体积复用 `doc-info.ts` 的 `docStats()` —— 和标题栏信息浮层是同一个口径、同一处定义；`useMemo` 按 content 缓存，八兆的文档不该每次 render 都数两遍。复制按钮复制的是 `doc.content` 原文。
-- **recogito 约束**：必须 `renderer: 'SPANS'`；库在鼠标松开时立即创建 draft，未提交的 draft 要在选区移动/外部点击/dismiss 时删除；`popupRef` 与 `setPopup` 同步写入；弹窗需带 `not-annotatable` class。view 弹窗用 `[data-annotation]` overlay span 的 rect 定位。`setSelected(id)` 走的是同一条 `selectionChanged`，所以程序化打开弹窗和点高亮是同一条路径。
-- **标注数据模型**：highlight 与 comment 是同一结构，`comment === null` 即纯高亮；UI 区分，数据层不区分。锚点是渲染文本的字符偏移（`start`/`end` + `quote`）。
-- **导出是两层模板**：外层 `settings.template`（`{{filePath}}` / `{{annotations}}`）套内层 `settings.annotationTemplate`（`{{highlight}}` / `{{comment}}`，默认 `> {{highlight}}\n{{comment}}`），条目之间恒定 `\n\n`，都在 `template.ts`。内层是**按行**渲染的，两条规则各自解决一个问题：**①一行里的占位符全空则整行丢弃**（连同行内的字面文字），所以同一个模板既能写纯高亮也能写带评论的，纯高亮不会拖一个空行；**②多行的值会把本行开头的引用/缩进标记（`^[ \t>]*`）补到自己每一行前面**，所以 `> {{highlight}}` 引的是整段而不只是第一行。渲染成空的条目在 `annotationsToMarkdown` 里被跳过，否则条目之间会多出一个空行。
-- **打开文档的唯一入口**：`src/lib/open-doc.ts`。文件关联 / 链接 / 对话框 / 拖拽 / 剪切板 / Recent / DEV sample 全部走它，保证「打开」与「记入 Recent」不会脱节。它写 store 在前、写库在后 —— 数据库出问题不该拦住阅读。**唯一的例外是读标注**：标注必须随文档一起进 store（见下），所以 `open()` 会先 await 它，但读失败只是裸开文档 + banner，绝不把文档挡在门外。从字符串进来的一律走 `openSpec()`（unwrap 链接 → 按需 `homeDir()` → `parseLocator` → `openLocator`）。**慢的那次不许盖掉快的那次**：每个公开入口先在 `createLatest()`（`lib/latest.ts`，有测试）领一张号再去取内容，`open()` 写 store 前验号，过期的直接丢弃 —— 否则点了一个 ssh 文档（最长 10 秒 ConnectTimeout）又改点一个本地文档时，姗姗来迟的那个会把屏幕换回你已经不要的内容。号是 module 级的，而 module 级即窗口级。
-- **本地路径以「真身」为准**：`read_local_file` 除内容外还返回 `canonicalize()` 后的路径，`openLocator` 用它来算 id 和 source。否则 `/tmp/a.md` 与 `/private/tmp/a.md` 会变成两条 Recent、两套标注 —— OS 递过来的路径本来就是 canonical 的，链接和输入框里的不是。
-- **文档模型 `OpenDoc`**：`id`（同时是 recogito 的 documentKey 和 Recent 主键）/ `kind`（`file` / `ssh` / `clipboard`）/ `title`（标题栏）/ `source`（导出模板 `{{filePath}}` 的值：本地是全路径，远端是 `host:path`，剪切板是派生标题）/ `content` / `format` / `contentHash`。取代了原来一人分饰三角的 `filePath`。入口只构造 `NewDoc`，`contentHash` 由 `open-doc` 统一盖章。
-- **Recent 与 SQLite**：`tauri-plugin-sql`，库文件 `sqlite:mdnotate.db`（`~/Library/Application Support/<identifier>/`），schema 由 `lib.rs` 的 `migrations()` 声明，前端 `Database.load` 时执行。**去重规则编码在 `id` 里** —— 本地文件是 `file:<绝对路径>`，远端是 `ssh:<host>:<path>`（host 必须进 id：两台机器上的同一路径是两个文档），剪切板是 `clip:<内容 hash>` —— 所以三种类型共用一条 `ON CONFLICT(id) DO UPDATE` upsert。上限 50 条，插入后按 `opened_at` 裁剪。剪切板正文存在 `body` 列；**远端文件和本地文件一样不存 body**，每次打开都重新拉取（内容变了 `contentHash` 对不上，旧标注按既有规则丢弃），所以离线读不了。列表查询不 select `body`。
-- **`sql:allow-execute` 不在 `sql:default` 里**，capabilities 必须单独加，漏了要到第一次写入才报错。
-- **dev 构建跑在自己的 identifier 下**：`channel.rs` 按 `cfg!(debug_assertions)` 在 `run()` 建 app 之前把 `context.config_mut().identifier` 改成 `top.ideachat.mdnotate.dev`，release 构建原样不动。Tauri 里所有「每个 app 一份」的东西都从**运行时** config 的 identifier 派生 —— data 目录（所以 `mdnotate.db` 和 `settings.json`）、single-instance 的 socket（`/tmp/<identifier>_si.sock`，macOS 上没有别的口子可改）—— 所以只改这一个字段就全部分开，前端零改动。**没有这条时 dev 和 `/Applications` 里那份共用同一个库**：dev 应用了 migration 3 之后，装着的 0.3.0 再打开就是「migration 3 was previously applied but is missing in the resolved migrations」，`Database.load` 从此挂掉、整个前端读不到库（2026-09-07 实测）。代价：dev 下 `default_app.rs` 拿 `.dev` identifier 去问 LaunchServices，永远是「未注册」，这块本来就只能拿打包产物验。dev 的库在 `~/Library/Application Support/top.ideachat.mdnotate.dev/`，查库断言要指到这里。
-- **migration 的 SQL 文本是被 checksum 的**：sqlx 对每条已应用的 migration 存 sha384，源码里改动 SQL 字符串（**包括缩进**）会让 `Database.load` 直接失败，整个前端从此读不到库。所以 `migrations()` 里旧条目的字符串是冻结的，只能往后追加新 version。`src/lib/db.ts` 是唯一的连接（`Database.load` 每次调用都会新开一个 pool，且 migration 只在首次 load 跑）。
-- **剪切板探测**：没有剪切板变化事件，`ClipboardCard` 在挂载时和 window focus 时各读一次（focus 正是用户从别处复制完回来的时刻）。读不到与空剪切板等同处理。内容必须**多于 `MIN_CLIPBOARD_CHARS`（200）字符**才算可读文档（`describeClipboard` 返回 `too-short`，按钮禁用、不显示预览）——复制一个词/一条 URL 不该点亮卡片。
-- **路径输入框**：`OpenFileCard` 里除了系统对话框还有两个手输/粘贴的入口（见下条），都接受绝对路径、`host:path` 和整条 `mdnotate://` 链接。路径永远不按空格切分，只 trim 两端；**`path-input.ts` 只负责脱掉"方言"外衣**：终端拖拽的 `\ ` 转义、外层单/双引号（引号内的反斜杠按 shell 语义保持字面）、`file://` URL（百分号解码，坏转义原样保留）；`mdnotate://` 链接原样放行，交给 `doc-locator` 按 URL 语义解码。**它意味着什么则全在 `doc-locator.ts`**——原先的 `pathInputError` 已并入 `parseLocator`，不要再造第二个校验器。`~` 仍由 `expandHome` 处理，`needsHome()` 决定要不要花一次 IPC 去问 `homeDir()`；远端路径里的 `~/` 是被剥掉而不是展开的（路径进远端 shell 前会被单引号包住，`~` 不会展开）。
-- **prefix + suffix 打开**：整条路径输入框下面还有一行，左边是记着用过的 prefix 的补全框（`PrefixCombobox`），右边是文件名。拼接规则在 `path-prefix.ts` 的 `joinPrefixSuffix`（纯逻辑，有测试）：**两半之间补一个 `/`**，除非 prefix 已经以 `/` 结尾、suffix 以 `/` 开头，或者——这条是会静默开错文件的那个——**prefix 以 `:` 结尾**：`host:path` 是相对远端 home 的，`host:/path` 是远端根目录，冒号后多一个斜杠就换了个文件且不报错。拼出来的东西照常喂给 `openSpec()`，**这里没有第二套语法**。补全是**不分大小写的子串匹配**而不是前缀匹配（存下来的 prefix 都以 `~/` 或 `/` 或主机名开头，没人想为了找它把这几个字符再打一遍），以输入开头的那些排在前面；prefix 为空时 focus 就列出最近用过的几条。**只有真的打开成功了才 `recordPrefix`** —— 打不开的路径不该赖在补全列表里；成功后清空 suffix 但**留着 prefix**，同一个目录下的下一篇就是这么开的。卡片下面那行拼接预览不是装饰：自动补的斜杠落在哪，只有它看得见。
-- **`path_prefixes` 表**：和 `annotations` 相反，**故意不挂外键**。一个目录比它装着的任何一篇文档都活得久，而 Recent 的 50 条裁剪会级联销毁 annotations —— 让它也跟着被裁掉就等于「读满 50 篇文档之后补全列表被清空」。prefix 文本自己当主键，所以「用过就浮到最前」就是一条 `ON CONFLICT(prefix) DO UPDATE SET used_at`，上限同样 50 条。
-- **标注持久化**：`annotations` 表，`doc_id` 外键指向 `recent_docs.id` 且 `ON DELETE CASCADE`（sqlx 默认开 `PRAGMA foreign_keys`，级联真的会触发）。**代价是 Recent 的 50 条裁剪会连带销毁标注**，这是明确选择的行为。改标注走 `src/lib/annotate.ts` 这一个漏斗：先写 store 后写库，写库失败只出 banner。写入用 `ON CONFLICT(id) DO UPDATE` 只更新 comment/updated_at —— quote 与偏移在提交那一刻就固定了。
-- **标注失效判定**：每条标注存一份创建时的 `doc_hash`（`hashText(content)`）。偏移是渲染文本的字符偏移，文件在外部被改过就会全部错位，而 recogito 的 `reviveTextSelector` 只按偏移数文本节点、**不校验 quote**，会静默高亮到错的句子。所以打开时 hash 不匹配的直接删除并提示丢弃条数（纯规则在 `annotations.ts` 的 `splitStaleAnnotations`，有测试）。剪切板文档的 id 本身就是内容 hash，天然永远匹配。
-- **标注必须与文档同时进 store**：`use-text-annotator` 只在 effect 创建时 `setAnnotations` 一次（deps 只有 `enabled`/`documentKey`），异步晚到的标注不会被渲染，所以 `openDoc(doc, annotations)` 是一次性写入的。
-- **`documentKey` 必须带上 `contentHash`，不能只写 docId**：`Reader` 传的是 `` `${docId}#${contentHash}` ``。annotator 只在这个 key 变化时重建，而**同一个文档被重开是常态**（刷新按钮、双击已开着的文档、Recent 里点回来），此时 docId 不变、正文却已经被换掉 —— 只按 docId 建 key 的话 annotator 会留在原地，继续按旧偏移在新正文上画高亮，正是上一条 `doc_hash` 规则拼命要避掉的「静默高亮到错的句子」。重建后它从 store 重新种一遍，而那时失效的标注已经被丢掉了。内容没变时 hash 不变、annotator 不重建，草稿、选区、滚动位置全部原地保留 —— 这是刷新一个没被改过的文件时的正常结果，不是巧合。同一个理由让 `useDocSearch` 的 `revision` 也带着 hash。
-- **刷新按钮**：`App.tsx` 里 Home 右边那个 `RotateCw`，只在 `doc && view === 'reader'` 时出现 —— 它重读的是你正看着的东西，而「打开」这个动作会把文档摆回屏幕上（`openDoc` 写 `view: 'reader'`），从设置页按下去等于把人踢出设置页。动作是 `open-doc.ts` 的 `reloadDoc()`，**它只是拿 `doc.source` 再 `openSpec()` 一次**：没有第二条刷新链路，所以哈希、失效标注、Recent、`opening` 指示器全部白捡。剪切板文档按钮置灰（正文只在库里，重读只会拿回同样的字符），能不能刷、tooltip 说什么由 `recent-docs.ts` 的 `describeReload()` 决定（纯规则，有测试）。失败不换文档：store 里的旧内容留着，只出 banner。
-- **排版**：`src/App.css` 的 `.prose-dense`，默认刻意紧凑（15px / 1.6 行高），追求信息密度而非留白。字号 / 行高 / 栏宽三项可在设置页调，**Markdown 与纯文本各存一套**（key 就是 `DocFormat`，设置页两个 tab，打开设置时默认停在当前文档的那一套）。传导链路只有一条：`typography.ts` 的 `typographyVars()` → 三个 `--prose-*` 自定义属性 → Reader 的滚动容器 inline style（设置页的预览块用同一个函数，所见即所得）。**默认值只写在 `DEFAULT_TYPOGRAPHY` 一处，CSS 里不留第二份**，所以 `.prose-dense` / `.prose-plain` / `.prose-column` 用的是不带 fallback 的 `var()` —— 新增渲染 prose 的地方必须挂在一个提供了这三个变量的节点下。`.prose-dense` 内部全是 `em`，动根字号整套层级自动等比缩放；`pre` 的行高是 `calc(var(--prose-line-height) - 0.1)`，当初刻意的是那 0.1 的差，不是绝对值。栏宽单位是 rem（不随字号联动），滑块最右一格越界即 `'full'`（`widthFromSlider`），左右 `px-8` 内边距恒定不参与调节。
-- **设置的读写**：`settings.ts` 是通用 kv —— `loadSettings()` / `saveSettings(patch)`，底层一个 key 一个 entry（plugin-store，浏览器降级 localStorage 存 JSON），加新设置项不会重写旧的。读回来一律过 `mergeSettings` 逐字段校验（typography 走 `clampTypography`，越界值 clamp、坏类型退默认、按 step 精度取整）：**手改坏 settings.json 不该让阅读器打不开**。store 里对应的是整个 `settings` 对象 + `updateSettings(patch)`。排版滑块是即时生效 + 防抖 200ms 落盘，`SettingsView` 卸载时会 flush 未落盘的改动，否则「拖完立刻点 Back」会丢最后一次。
-- **深色模式靠反转调色板，不靠 `dark:` 变体**：Tailwind v4 的颜色都编译成 `var(--color-*)`，所以 `App.css` 的 `.dark` 块重新定义整条 `neutral-*` 阶梯就一次性翻转了全部约 130 处颜色 class，组件的 className **一处没改**。成立的前提是本项目把 neutral 当作一条严格的「离页面底色多远」的阶梯用（50 侧栏 / 100 hover / 200-300 边框 / 400-500 弱文字 / 700-800 强文字）——新写组件用同一套阶梯就自动有深色，**不要**再去补 `dark:`。三类例外：① `bg-white` 既是页面底也是琥珀按钮上的 `text-white`，`--color-white` 动不得，所以拆出 `bg-page`（页面底 + 内凹的输入框）和 `bg-raised`（浮在上面的弹窗 / 选中的分段）两个 `@theme` token；② `amber-50/100/200`、`red-50/200` 是底色，`amber-700`/`red-700` 是它们上面的字，深色下两头对调；③ 只做纯前景的（amber-400/500/600、white）原样不动 —— 想在深浅两色下都成立的淡色前景写 `amber-500/30` 这种带透明度的，**不要**去借 `amber-200` 这类会被翻转的档位（评论图标的填充就是这么来的）。`.prose-*` 的颜色则全部抽成 `:root` 里的 `--prose-*` 变量，`.dark` 给第二套。唯一用到 `dark:` 的地方是 disabled 按钮的不透明度：同一个 40% 压得住白底、压不住近黑的底。
-- **主题的三处副作用**：`lib/theme.ts` 是唯一出口 —— `<html>` 上的 `.dark` class（驱动样式表）、`color-scheme`（驱动样式表够不着的滚动条 / 光标 / range 轨道）、以及 Tauri 的 `getCurrentWindow().setTheme()`（驱动原生右键菜单、文本选择菜单、traffic light；`null` 才是「跟随系统」）。**`core:window:allow-set-theme` 不在 `core:default` 里**，和 `sql:allow-execute` 同一类坑。`setTheme('dark')` 会连带把 webview 的 `prefers-color-scheme` 也改成 dark，但只有 `preference === 'system'` 时才去读那个 query，而那时 `setTheme(null)` 正让它跟随系统，所以不会自锁。
-- **主题必须在第一帧就对**：真正的设置在异步 IPC 后面，所以 `theme` 额外在 `localStorage` 存一份同步可读的镜像，`main.tsx` 在 React 渲染前就 `applyTheme()`，消除冷启动闪白。**代价是 store 的初始 `settings.theme` 必须从这份缓存种子（而不是 `DEFAULT_SETTINGS`）**：同步主题的 effect 会把当前值写回缓存，若它带着默认值 `system` 先跑一轮，就会在 `loadSettings()` 读到之前把真实偏好覆盖掉 —— 浏览器模式下缓存就是存储，偏好会被永久抹掉。缓存的 key 和 JSON 编码与 `settings.ts` 的浏览器降级完全一致，两条路径写的是同一个东西（有测试锁住）。
-- **深色下的高亮**：recogito 的高亮层是 `mix-blend-mode: multiply`，在深色底上等于隐形（暗乘暗只会更暗），`.dark` 里必须换成 `screen`；不透明度也要跟着提（`highlightStyle()`）。改样式用 `anno.setStyle()` 热更新（内部会 `redraw(true)`），**不要**因为主题变了去重建 annotator —— 那会丢掉草稿和选区。库还全局注入了一条 18% 蓝的 `::selection`，深色下几乎看不见，也在 `.dark` 里盖掉了。
-- **浏览器降级**：`src/lib/tauri-env.ts` 的 `isTauri` 判断，让 UI 可以在纯浏览器里迭代（示例文档 / localStorage / navigator.clipboard）。**深色模式的验收可以走这条路**：`pnpm dev` + agent-browser，`agent-browser set media dark|light` 直接模拟系统偏好（headless Chrome 默认就是 dark）。
+## 必须知道的规则
+
+下面每条都是「不打开任何文档也可能改坏」的东西。多数改坏了**不报错**。
+
+### 打开文档与窗口
+
+- **入口各只有一个。** 外部进来的文档（Finder / argv / single-instance / 拖拽）全部经 `lib.rs` 的 `open_spec()`；前端一律经 `open-doc.ts`，字符串走 `openSpec()`。不要另开一条路，否则「打开」与「记入 Recent」会脱节。
+- **传递的是 spec，不是路径**：绝对路径、`host:path`、或整条 `mdnotate://open?path=…` 链接。语法只在 `doc-locator.ts` 实现，Rust 不解析链接。链接的路径必须走 query 参数。
+- **往窗口发事件用 `emit_to`，不用 `emit`。** 广播会让每个窗口都换文档 / 都弹面板。
+- **前端先注册 listener，再 drain pending。**
+- **一个文档一个窗口**（`choose_target()`）：已开着的送回原窗口并重读；停在首页的空窗口就地填入；否则开新窗口 `doc-N`。窗口内的入口一律原地替换。
+- **⌘N 开出的空窗口不能标 `taken`**，否则下一篇文档会另开窗口而不是填进去。
+- **打开失败也要 `announceDoc()`**：窗口在路由那一刻就被标成装着该文档了。
+- **「打开成功关掉 ⌘O 面板」只写在 `store.ts` 的 `openDoc` 里**；落区的 drop 事件里 JS 不自己打开文件，Rust 已经开过了。
+- **菜单是在 `Menu::default()` 上打补丁**，不要整个重建。
+- **跨语言的重复要同步改**：可打开的扩展名（`doc-locator.ts` ↔ `lib.rs`）、本地文件的 docId（`recent-docs.ts` ↔ `lib.rs`）、shell 转义（`lib.rs` ↔ `cli/src/quote.rs`）。
+
+细节在 `kb/docs/window-routing.md`（路由、注册表、冷启动、菜单、⌘O 面板）和 `kb/docs/opening-documents.md`（spec 与链接的写法、ssh 读取、格式、路径输入、prefix + suffix、剪切板）。改 `lib.rs` 的路由部分、`open-doc.ts`、`doc-locator.ts` 之前先读。
+
+### 权限
+
+`capabilities/default.json` 的 `"windows"` 必须是 `["main", "doc-*"]`，漏了新窗口就是零权限且静默失效。`sql:allow-execute`、`core:window:allow-set-title`、`core:window:allow-set-theme` 都不在各自的 default 集里，要单独声明。
+
+### 数据
+
+- **已发布的 migration 是冻结的**，SQL 字符串连缩进都不能改（sqlx 校验 checksum，变了整个库打不开）。只能追加新 version。
+- **`src/lib/db.ts` 是唯一的数据库连接**，不要在别处 `Database.load`。
+- **dev 的库在 `~/Library/Application Support/top.ideachat.mdnotate.dev/`**，查库断言要指到这里。
+- Recent 上限 50 条，**裁剪会级联删除该文档的标注**；`path_prefixes` 故意不挂外键。两者都是有意的。
+- 设置读回来一律过 `mergeSettings` 校验；加设置项要同时加校验。
+
+细节在 `kb/docs/data-storage.md`：三张表的规则、dev identifier、设置存储。加表、加 migration、加设置项之前先读。
+
+### 标注
+
+- **标注的锚点是渲染文本的字符偏移，所以不许改动正文的文本节点。** 往正文里插元素（比如用 `<mark>` 做搜索高亮）会让所有标注错位；包一层容器可以。
+- **改标注只走 `annotate.ts`**；标注必须和文档**一起**进 store（`openDoc(doc, annotations)`），晚到的不会被渲染。
+- **标注层的 `documentKey` 是 `docId#contentHash`**，只写 docId 会在文档重开后按旧偏移高亮到错的句子。
+- 内容哈希对不上的标注在打开时直接丢弃，这是有意的。
+- recogito 必须用 `SPANS` renderer；我们放进标注容器的层都要带 `not-annotatable`；换主题用 `setStyle()`，不要重建标注层。
+- 纯图标按钮用 `IconButton`，不手写裸 `<button>`。
+
+细节在 `kb/docs/annotations-and-export.md`：失效判定、弹窗与落点、评论图标层、侧栏、两层导出模板的按行规则。改 `use-text-annotator.ts`、`template.ts` 或标注相关组件之前先读。
+
+### 阅读器界面
+
+- **键盘：keydown 里不许裸判 `e.key`，一律走 `src/lib/keys.ts`**（`isImeComposing` / `isSubmitEnter` / `isCancelEscape`）。输入法组字期间的 Enter / Esc 和普通按键长得一样。document 级的单键快捷键同样要判；带修饰键的组合不用。
+- **`main.tsx` 里的 `watchComposition()` 不能删。** 删了真机上中文输入就坏，而测试依然全绿。
+- **Reader 从不卸载**，其它视图是盖在上面的不透明层。所以 document 级快捷键要自己判断 `enabled`（`view === 'reader' && !openDialog`）。
+- Reader 根节点的 `relative z-0` 和 `min-w-0` 都是必需的；正文不许横向滚动，超宽内容自己内部滚。
+- **⌘F 用 CSS Custom Highlight API**，且只经 `find-painter.ts`：高亮对象只 `set()` 一次，之后只 `clear()` / `add()`，绝不 `delete()` 或重新 `set()`（WebKit 不重绘）。`::highlight()` 规则只能放在 `find-highlight.css`。
+- **⌘A 是自己实现的**，在 capture 阶段拦（库也绑了 ⌘A，会把整篇建成标注）。
+- **源码视图切换时三样东西要跟着重置**：搜索索引、目录构建、滚动 spy。
+
+细节在 `kb/docs/reader-ui.md`：视图覆盖、三栏布局、源码视图、搜索的规范化文本、⌘A、输入法。改 `Reader.tsx`、搜索、或任何键盘处理之前先读。
+
+### 样式
+
+- **深色模式靠反转 neutral 色阶，不写 `dark:`。** 新组件沿用 neutral 阶梯（50 侧栏 / 100 hover / 200–300 边框 / 400–500 弱文字 / 700–800 强文字）就自动有深色。
+- 页面底用 `bg-page`，浮层用 `bg-raised`，不用 `bg-white`。
+- 两种主题下都要成立的淡色前景写带透明度的（`amber-500/30`），不借会被翻转的档位（`amber-200`）。
+- **排版数值只有一份默认值**（`DEFAULT_TYPOGRAPHY`），CSS 里的 `var(--prose-*)` 没有 fallback：新增渲染正文的地方必须挂在提供这三个变量的节点下。
+- 主题的副作用只经 `lib/theme.ts`；store 里主题的初始值必须来自缓存而不是默认值。
+
+细节在 `kb/docs/theme-and-typography.md`。新写组件、调颜色之前先读。
+
+### Rust command 与 macOS
+
+- **会等人或等网络的 command 必须是 `#[tauri::command(async)]`**（`read_remote_file`、CLI 的安装 / 卸载）。同步 command 跑在主线程，会冻住窗口。
+- **`start_window_drag` 反过来必须是同步的**，改成异步窗口就拖不动。顶栏拖拽不用 Tauri 自带的 drag region。
+- 菜单事件里建窗口要包 `run_on_main_thread`。
+- `.md` 绑定的 UTI 是机器相关的，不能硬编码；「设为默认 App」的系统调用立刻返回成功但并未生效，要轮询。
+- **不要把 `pnpm tauri build` 的未签名产物拷进 /Applications**：macOS 会静默取消它的文档 handler 资格，还会顶掉 brew 装的签名版。
+
+细节在 `kb/docs/macos-integration.md`：文件关联的两条 document type、默认 App、窗口拖拽。改 `Info.plist`、`default_app.rs`、`window-drag.ts` 之前先读。
+
+### mdnotate CLI
+
+- 独立 crate，包名 `mdnotate-cli`；**刻意不依赖 app 的 lib**，workspace 的 `default-members` 只有 app。
+- 测试用 `-p mdnotate-cli`，**不能用 `--workspace`**。行为规格表就是 `dispatch.rs` 的测试。
+- **`-h` 是 host 不是 help**；选项只在第一个位置参数之前识别。
+- 交给 ssh 的远端命令必须是**一整个字符串、一次 `.arg()`**。
+- 读 transcript 用 `serde_json::Value` 取字段，不反序列化成 struct。
+- 产物 `src-tauri/resources/bin/mdnotate` 是构建产物（已 gitignore）。`build-cli.sh` 挂在 `beforeBuildCommand` / `beforeDevCommand`，**不能**挂 `beforeBundleCommand`。
+- 走 `bundle.resources` 而不是 `externalBin`，所以 CLI 要在打包前自己签好。
+
+细节在 `kb/docs/mdnotate-cli.md`：四种用法、远端推送、`last` 的 transcript 定位、打包与钥匙串、安装卡片的状态。改 `src-tauri/cli/`、`build-cli.sh`、`cli_install.rs` 之前先读。
+
+## 验收
+
+- **Tauri 窗口没法用 agent-browser 驱动**，截图和 System Events 也被 TCC 挡住。界面改动尽量在 `pnpm dev` 的浏览器模式里验，其余靠人眼。
+- 浏览器模式里划词必须用真实鼠标序列（`mouse move → down → move → move → up`），合成事件无效。
+- Rust + SQLite：起 `pnpm tauri dev`，用 `src-tauri/target/debug/mdnotate '<spec>'` 转发文档，再 `sqlite3` 查库。
+- 冷启动、文件关联、链接只能用打包产物验；测完 `lsregister -u <built app>`。
+- 杀 dev 实例要两条：`pkill -f "tauri dev"; pkill -f "target/debug/mdnotate"`。
+- 同时改了 Rust 和前端、现象解释不通时，先整个重启再下结论。
+
+完整步骤在 `kb/docs/verification.md`：各类改动的验证路线、窗口行为的自动断言、数据库连接的排查、测完要收拾什么。动手验收之前先读。
 
 ## 发布
 
-push `v*` tag 触发 `.github/workflows/release.yml`：macOS runner 构建 universal dmg，Developer ID 签名 + 公证 + staple（Tauri CLI 根据 `APPLE_CERTIFICATE` / `APPLE_API_KEY` 等环境变量自动完成），发布到本仓库 GitHub Release。tag 必须与 `tauri.conf.json` 的 `version` 一致（workflow 会校验）。workflow_dispatch 手动触发只出 artifact 不发 release。签名凭据 secrets 命名与 vocalflow-mac 一致，源文件在 `~/Sync/apple-developer/`；签名背景知识见 `../vocalflow-mac/kb/notes/2026-08-10-macos-developer-id-signing-guide.md`。
+push `v*` tag 触发 `.github/workflows/release.yml`：构建 universal dmg，签名 + 公证，发 GitHub Release，更新 Homebrew cask（`reorx/homebrew-tap`）。tag 必须与 `tauri.conf.json` 的 version 一致。
 
-CLI 那半是 workflow 自己的一步：Build 步骤额外传 `MDNOTATE_CLI_TARGETS: aarch64-apple-darwin,x86_64-apple-darwin`（tauri 的 `--target universal-apple-darwin` 不管 Resources 里的独立 crate，两个架构各编一次再 `lipo` 是 `build-cli.sh` 自己做的），Verify 步骤对它单独跑一遍 `codesign -dvv` 与 `lipo -archs`。`scripts/bump-version.sh` **不动** `src-tauri/cli/Cargo.toml` 的版本号 —— 它固定是 `0.0.0`，`mdnotate --version` 读的是 bundle 的 `CFBundleShortVersionString`，那个数字没人看得到。
-
-**完整流程走 `.claude/skills/release/`**（含定版本号的判断、失败后怎么收拾）。两个配套脚本：`scripts/release-status.sh` 一屏核对版本文件 / tag / release / workflow 结论——**tag 推了但 workflow 挂了会留下一个有 tag 没 release 的版本号，只看 `gh release list` 会以为它还空着**；`scripts/bump-version.sh <版本号>` 把四处版本号（`package.json` / `tauri.conf.json` / `Cargo.toml` / `Cargo.lock`）一次改齐并自校验，不要手工 sed。
-
-**Homebrew cask**：`brew install --cask reorx/tap/mdnotate`，cask 定义在 `reorx/homebrew-tap` 仓库（本地 `~/Code/homebrew-tap`）的 `Casks/mdnotate.rb`。发版时 workflow 的「Bump Homebrew cask」步骤用 sed 改写 version / sha256 后推送 tap 仓库；依赖 `TAP_PUSH_TOKEN` secret（对 homebrew-tap 有 contents:write 的 fine-grained PAT），未配置只是跳过，需手动 bump。cask 的 zap 列表引用 identifier `top.ideachat.mdnotate`，identifier 变了要同步。
-
-## 测试提示
-
-agent-browser 用合成 PointerEvent 无法触发 recogito 选区；必须用真实 CDP 鼠标序列：`mouse move` → `mouse down` → 中间点 `mouse move` → 终点 `mouse move` → `mouse up`。
-
-浏览器模式下 `navigator.clipboard.readText()` 会被权限拒绝，剪切板 UI 恒显示 empty；调 UI 时用 `eval` 覆盖 `navigator.clipboard` 再 `dispatchEvent(new FocusEvent('focus'))` 触发重读。
-
-Tauri 窗口没法用 agent-browser 驱动（不开 CDP）；`screencapture` 与 System Events 基本被 TCC 挡死（截图全黑 / AX 报 0 窗口），**UI 改动只能靠人眼验收**。验证 Rust + SQLite 侧改用：`pnpm tauri dev` 起实例 → 用 `src-tauri/target/debug/mdnotate '<spec>'` 触发 single-instance 转发（spec 可以是路径、`host:path`、或 `mdnotate://open?path=…`，argv 分支认链接）→ `sqlite3` 直接查库断言。注意路径会被 `canonicalize`，`/tmp/x.md` 落库是 `file:/private/tmp/x.md`。
-
-**窗口行为可以自动验收，不必靠人眼**：`CGWindowListCopyWindowInfo`（pyobjc 的 `Quartz`，本机已装）不吃 AX 权限就能拿到窗口数量、坐标、以及**前后顺序**（返回顺序即 front-to-back，用来断言「已开的文档被聚焦」），本机还给了 Screen Recording 权限所以窗口标题也读得到 —— 标题就是文档名，正好用来断言哪个窗口装着哪个文档。脚本见 `tmp/multiwindow/list-windows.py`。**冷启动只能用打包产物验**：`pnpm tauri build --bundles app` → `open -a <built app> <file.md>`（不用 `lsregister -f`，`open -a` 直接指定 bundle 就能走 LaunchServices 的 `application:openURLs:`），且必须先退出 `/Applications` 里装着的那份——打包产物和它 identifier 相同，single-instance 会把文档转发给先起来的那个（dev 实例走 `.dev` identifier，不参与这场撞车，见「dev 构建跑在自己的 identifier 下」）。**`pkill -f "tauri dev"` 杀不干净 dev 实例**：它只杀 CLI 父进程，真正在跑的 `target/debug/mdnotate` 会被 launchd 收养并继续占着 dev 的 socket，症状是下一次 `tauri dev` 起来的实例收不到 argv 转发（文档悄悄进了那个看不见的旧实例）。要连 `pkill -f "target/debug/mdnotate"` 一起。同理，**`open 'mdnotate://…'` 验不了未安装的构建产物**：scheme 的 handler 是 LaunchServices 注册的那份（通常是 `/Applications` 里的），它起来后发现已有实例、把空 argv 转发过去就退出了，链接直接丢失 —— 链接只能拿真正注册的那份 app 验。**测完记得 `lsregister -u <built app>`**：`open -a` 会把这个未签名产物注册进 LaunchServices，留着它可能顶掉 `/Applications` 里签名版的 `.md` 关联。
-
-**改了 Rust 又改了前端时不要信 HMR**：Rust 重建会重启 app、webview 重新加载，两边很容易错位成"前端是新的、二进制是旧的"，症状是某一类打开方式静默失败。遇到解释不通的现象先 `pkill -f "tauri dev"` 整个重启一遍再下结论。
-
-验证真正的 `mdnotate://` scheme 必须用打包产物：`pnpm tauri build --bundles app` → `lsregister -f <app>`（在 `/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/`）→ `open 'mdnotate://open?path=…'`。冷启动（app 没跑）和热启动（已在跑）是两条不同的代码路径，都要试。
-
-前端不碰库时先怀疑 `Database.load` 挂了（连接 promise 被 memo，一次失败之后全线静默）。判断办法：`lsof -p <pid> | grep mdnotate.db` 看有没有句柄，`_sqlx_migrations` 看版本停在哪。要模拟应用侧写入，需要真实的 docId / contentHash：这些函数用了无扩展名 import，`node` 直接跑会 `ERR_MODULE_NOT_FOUND`，得借 vitest 的 resolver —— `tmp/doc-hash.test.ts` 就是干这个的（`DOC_SPEC=… DOC_TEXT_FILE=… DOC_OUT=… pnpm exec vitest run tmp/doc-hash.test.ts --config /dev/null`，注意 vitest 的 `include` 只认 `tests/`，所以要 `--config /dev/null`）。
+**发版一律走 `.claude/skills/release/`**，push tag 不可逆。版本号用 `scripts/bump-version.sh <版本号>` 改（四处一次改齐），状态用 `scripts/release-status.sh` 核对；不要手工 sed。
 
 ## 文档
 
-- `kb/sessions/` — 历史 session 总结，了解某次改动的来龙去脉时查阅
-- `kb/notes/` — 单个技术问题的专题笔记（如 `2026-08-16-ime-enter-escape.md`：输入法组字与按键判定）
+`kb/docs/` —— 各子系统的现状与理由：
+
+- `kb/docs/window-routing.md` —— 改多窗口路由、窗口注册表、冷启动、File 菜单、⌘O 面板时读
+- `kb/docs/opening-documents.md` —— 改文档的读取、spec / 链接语法、ssh 远端、路径输入、prefix 补全、剪切板入口时读
+- `kb/docs/annotations-and-export.md` —— 改标注、弹窗、评论图标、标注侧栏、导出模板时读
+- `kb/docs/reader-ui.md` —— 改阅读页布局、⌘F、⌘A、源码视图、键盘与输入法处理时读
+- `kb/docs/theme-and-typography.md` —— 新写组件、改颜色、主题或排版时读
+- `kb/docs/data-storage.md` —— 加表、加 migration、加设置项，或要去库里查数据时读
+- `kb/docs/macos-integration.md` —— 改文件关联、默认 App、窗口拖拽，或要安装构建产物时读
+- `kb/docs/mdnotate-cli.md` —— 改 `mdnotate` 命令、它的打包签名、安装卡片、Agent Skill 时读
+- `kb/docs/verification.md` —— 验收任何改动之前读
+
+其它：
+
+- `kb/notes/` —— 单个技术问题的专题笔记：`2026-08-16-ime-enter-escape.md`（输入法与按键判定）、`2026-09-17-css-highlight-repaint.md`（WebKit 高亮不重绘）
+- `kb/sessions/` —— 历史 session 总结，了解某次改动的来龙去脉时查阅
+- `kb/plans/` —— 开发计划
