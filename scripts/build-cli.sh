@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # 构建 `mdnotate` 命令行二进制，放到 src-tauri/resources/bin/mdnotate，
 # 由 tauri.conf.json 的 bundle.resources 收进 .app 的 Contents/Resources/bin/。
-# 由 beforeBundleCommand 自动调用（cargo 编译完、收 resources 之前），也可以单独跑。
+# 由 beforeBuildCommand / beforeDevCommand 自动调用，也可以单独跑。不能挂
+# beforeBundleCommand：tauri-build 在 cargo 编译时就校验 bundle.resources 的路径
+# 存在，而 beforeBundleCommand 要到编译之后才跑。
 #
 # 为什么不用 externalBin：那条路要为每个架构编一份再 lipo，还得赌 tauri#11992
 # （sidecar + 公证 → "The signature of the binary is invalid"）已经修好。Resources
@@ -18,7 +20,7 @@
 #                         就只能原地运行。变量名与 tauri CLI 一致，所以
 #                         build-signed.sh 和 release workflow 不用额外传参。
 #
-# 幂等：重复跑就是重新编译、重新覆盖、重新签名。beforeBundleCommand 在
+# 幂等：重复跑就是重新编译、重新覆盖、重新签名。beforeBuildCommand 在
 # universal target 下跑几次没有明说，所以不能假设只跑一次。
 set -euo pipefail
 cd "$(dirname "$0")/.."

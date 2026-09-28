@@ -65,7 +65,7 @@ jobs:
       - name: Run CLI tests
         run: cargo test --manifest-path src-tauri/Cargo.toml -p mdnotate-cli
 
-      # MDNOTATE_CLI_TARGETS 是 scripts/build-cli.sh 读的（beforeBundleCommand
+      # MDNOTATE_CLI_TARGETS 是 scripts/build-cli.sh 读的（beforeBuildCommand
       # 会调它）：Resources 里的 mdnotate 命令是独立 crate，tauri 的
       # --target universal-apple-darwin 不管它，两个架构各编一次再 lipo 由脚本自己做。
       - name: Build, sign and notarize
