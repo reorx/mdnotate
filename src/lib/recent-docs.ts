@@ -8,6 +8,7 @@
  */
 
 import type { DocFormat } from './doc-locator';
+import { splitFrontMatter } from './front-matter';
 
 export type DocKind = 'file' | 'ssh' | 'clipboard';
 
@@ -23,7 +24,7 @@ export interface OpenDoc {
   content: string;
   /** Whether to render it as Markdown or show it as it is. */
   format: DocFormat;
-  /** Hash of `content`. Annotations stored under any other hash were made on text that has since changed. */
+  /** Source hash plus any applicable rendering revision, since anchors use rendered text offsets. */
   contentHash: string;
   /**
    * When the file this text came from was last written, in epoch milliseconds.
@@ -99,6 +100,17 @@ export function hashText(text: string): string {
     h = Math.imul(h, 0x01000193);
   }
   return (h >>> 0).toString(16).padStart(8, '0') + text.length.toString(36);
+}
+
+/**
+ * Front matter used to render as ordinary Markdown. Its field list changes
+ * text offsets even when source bytes do not change, so old anchors must use
+ * the same discard path as an edited document. Keep every other hash (and all
+ * document ids) unchanged. Future metadata text changes must bump this suffix.
+ */
+export function annotationContentHash(content: string, format: DocFormat): string {
+  const revision = format === 'markdown' && splitFrontMatter(content) ? ':front-matter-v1' : '';
+  return hashText(content) + revision;
 }
 
 export function fileDocId(path: string): string {

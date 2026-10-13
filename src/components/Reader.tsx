@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { useAppStore } from '../store';
 import { createAnnotation, deleteAnnotation, updateComment } from '../lib/annotate';
 import { convertBoxTables } from '../lib/box-table';
+import { splitFrontMatter } from '../lib/front-matter';
 import { DEFAULT_PANEL_WIDTHS, panelWidthFromPointer, type PanelSide } from '../lib/panels';
 import { saveSettings } from '../lib/settings';
 import { buildToc, type TocItem } from '../lib/toc';
@@ -15,6 +16,7 @@ import { AnnotationList } from './AnnotationList';
 import { AnnotationPopup } from './AnnotationPopup';
 import { CommentMarkers } from './CommentMarkers';
 import { FindBar } from './FindBar';
+import { FrontMatter } from './FrontMatter';
 import { StatusBar } from './StatusBar';
 import { Toc } from './Toc';
 
@@ -118,10 +120,13 @@ export function Reader() {
 
   useEffect(() => setSourceView(false), [docId]);
 
-  // What the Markdown renderer eats, not what the document is: box-drawing
-  // tables pasted from CLI output are rewritten into GFM tables here, while
-  // the store keeps the source untouched for source view, stats and hashing.
-  const renderedMarkdown = useMemo(() => (content !== null ? convertBoxTables(content) : ''), [content]);
+  // Split metadata before rewriting CLI tables: a YAML literal block may
+  // itself contain a grid that must stay verbatim. Neither transform reaches
+  // the store, source view, copied text or document statistics.
+  const { frontMatter, renderedMarkdown } = useMemo(() => {
+    const frontMatter = format === 'markdown' ? splitFrontMatter(content ?? '') : null;
+    return { frontMatter, renderedMarkdown: convertBoxTables(frontMatter?.body ?? content ?? '') };
+  }, [content, format]);
 
   const annotator = useTextAnnotator({
     // Source view drops the annotator entirely, which is what makes selecting
@@ -276,6 +281,7 @@ export function Reader() {
                 listing, depends on. */}
             {format === 'markdown' && !showingSource ? (
               <article ref={articleRef} className="prose-dense">
+                {frontMatter && <FrontMatter yaml={frontMatter.yaml} />}
                 {/* A table cannot wrap below its min-content width, and the
                     scroller no longer scrolls sideways for it — so a wide table
                     scrolls inside its own box, like `pre` always has. */}

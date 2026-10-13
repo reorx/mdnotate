@@ -37,6 +37,16 @@ tags:
 
 在正文列底部、滚动容器外面。字数与体积和标题栏信息浮层是同一个口径、同一处定义，按内容缓存 —— 八兆的文档不该每次渲染都数两遍。复制按钮复制的是文档原文。
 
+## Front Matter
+
+Markdown 文件开头用 `---` 包裹的 YAML 在正文顶部按字段列表显示，不再被误识别成分隔线和 Setext 标题。支持 BOM、LF / CRLF、`---` / `...` 结束标记。只有文件开头且闭合的块会被识别；正文里的分隔线照常渲染。
+
+`front-matter.ts` 先拆出元数据，再把正文交给框线表格转换和 Markdown 渲染。原文留在 store，源码视图、复制、统计均保留完整 Front Matter。`yaml` 解析器负责引号、折叠 / 多行字符串与字段类型；列表、嵌套映射和 alias 保留 YAML 写法，不展开 alias。无效 YAML、重复 key、非字段映射或未知 tag 回退为原始代码块，不影响正文阅读。
+
+字段列表使用正文的字号和深浅主题，窄正文列自动改为上下排列。字段和值可以搜索、划词和标注，只有「Front matter」界面标签带 `not-annotatable`；元数据不进入目录。
+
+这次布局改变了渲染文本偏移，所以仅含已闭合 Front Matter 的 Markdown 使用 `:front-matter-v1` 哈希后缀。升级前的标注经现有失效机制删除并提示，避免高亮错位；普通 Markdown、纯文本、docId 不受影响。以后再改变元数据文本布局时也须升级这个版本。
+
 ## 源码视图
 
 状态栏最右的眼睛按钮，在渲染视图和 Markdown 原文之间切换。
@@ -134,6 +144,7 @@ tags:
 
 - `src/App.tsx` —— 视图覆盖层与 `inert`
 - `src/components/Reader.tsx` —— 三栏、源码视图、搜索与全选的启用条件
+- `src/lib/front-matter.ts`、`src/components/FrontMatter.tsx` —— YAML 文件头的识别、解析与展示
 - `src/lib/panels.ts` —— 侧栏宽度的默认值与范围
 - `src/lib/search.ts`（纯规则）、`src/lib/use-doc-search.ts`（DOM 那半）、`src/lib/find-painter.ts`、`src/find-highlight.css`
 - `src/lib/use-select-all.ts`

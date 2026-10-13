@@ -280,6 +280,53 @@ html ::selection {
   margin: 1.2em 0;
 }
 
+/* Metadata uses the prose palette and scale, with long values wrapping even
+   when the reader is squeezed between both sidebars. Container queries follow
+   the article width rather than the window width. */
+.front-matter {
+  container-type: inline-size;
+  margin-bottom: 1.2em;
+  padding: 0.75em 0.9em;
+  background: var(--prose-pre-bg);
+  border: 1px solid var(--prose-pre-border);
+  border-radius: 5px;
+}
+.front-matter-label {
+  margin-bottom: 0.6em;
+  color: var(--prose-quote-text);
+  font-size: 0.8em;
+  font-weight: 600;
+}
+.front-matter-fields {
+  margin: 0;
+}
+.front-matter-field {
+  display: grid;
+  grid-template-columns: minmax(0, 8em) minmax(0, 1fr);
+  gap: 0.2em 1em;
+  padding: 0.35em 0;
+}
+.front-matter-field dt {
+  color: var(--prose-quote-text);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.87em;
+}
+.front-matter-field dd {
+  min-width: 0;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.front-matter-structured {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.87em;
+}
+@container (max-width: 24rem) {
+  .front-matter-field {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Plain text: shown as written, wrapped so long lines stay readable without a
    horizontal scrollbar. Monospace because the formats that land here — logs,
    config, CSV — are the ones whose columns line up. */

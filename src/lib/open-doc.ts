@@ -14,11 +14,11 @@ import {
 } from './doc-locator';
 import {
   clipboardDocId,
+  annotationContentHash,
   countChars,
   deriveClipboardTitle,
   describeReload,
   fileDocId,
-  hashText,
   makeSnippet,
   type NewDoc,
   type OpenDoc,
@@ -57,7 +57,7 @@ const opens = createLatest();
  */
 async function open(doc: NewDoc, attempt: number): Promise<void> {
   const { openDoc, setError } = useAppStore.getState();
-  const contentHash = hashText(doc.content);
+  const contentHash = annotationContentHash(doc.content, doc.format);
 
   let note: string | null = null;
   const restored = await restoreAnnotations(doc.id, contentHash).catch((e) => {
