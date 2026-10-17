@@ -165,6 +165,8 @@ pnpm build:signed  # 构建 + 签名 + 公证，产物可安装进 /Applications
 
 push `v*` tag 触发 `.github/workflows/release.yml`：构建 universal dmg，签名 + 公证，发 GitHub Release，更新 Homebrew cask（`reorx/homebrew-tap`）。tag 必须与 `tauri.conf.json` 的 version 一致。
 
+tap 写权限使用本仓库的 `TAP_DEPLOY_KEY` secret（仅对 tap 可写的 SSH deploy key）；缺失时跳过 cask 更新。配置与轮换命令见 `.claude/skills/release/SKILL.md`。
+
 **发版一律走 `.claude/skills/release/`**，push tag 不可逆。版本号用 `scripts/bump-version.sh <版本号>` 改（四处一次改齐），状态用 `scripts/release-status.sh` 核对；不要手工 sed。
 
 ## 文档

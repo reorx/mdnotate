@@ -114,8 +114,17 @@ scripts/release-status.sh     # 版本文件 / tag / release 全对上
 git -C ~/Code/homebrew-tap pull && head -5 ~/Code/homebrew-tap/Casks/mdnotate.rb
 ```
 
-cask 那步依赖 `TAP_PUSH_TOKEN` secret，没配的话 workflow 只打印一句跳过、不算失败，
-需要手动 bump `reorx/homebrew-tap` 的 `Casks/mdnotate.rb`（version + dmg 的 sha256）。
+cask 那步依赖 `TAP_DEPLOY_KEY` secret：私钥存于本仓库的 Actions secret，公钥是
+`reorx/homebrew-tap` 上标题为 `release: reorx/mdnotate` 的可写 deploy key，权限仅覆盖 tap。
+`actions/checkout` 用该 key 检出 tap，之后通过 SSH 推送；仍只用 sed 更新 version / sha256，
+内容没变就不提交。没配 key 时 workflow 只打印一句跳过、不算失败，需要手动 bump
+`reorx/homebrew-tap` 的 `Casks/mdnotate.rb`（version + dmg 的 sha256）。
+
+首次配置或需要轮换时运行（自动创建公钥、设置私钥 secret，本地不留私钥；不改 Apple 凭据）：
+
+```bash
+bash ~/Code/devblocks/macos-app-release/scripts/setup-secrets.sh --repo reorx/mdnotate --skip-apple
+```
 
 ## 7. workflow 挂了
 

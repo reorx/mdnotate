@@ -24,6 +24,8 @@ jobs:
     runs-on: macos-15
     permissions:
       contents: write
+    env:
+      HAS_TAP_DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY != '' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -111,22 +113,27 @@ jobs:
             || gh release upload "$GITHUB_REF_NAME" "${DMG[@]}" --clobber
 
       # 发版后自动更新 reorx/homebrew-tap 的 cask（version + sha256）。
-      # 需要 TAP_PUSH_TOKEN secret：对 homebrew-tap 仓库有 contents:write 的
-      # fine-grained PAT（GITHUB_TOKEN 只覆盖本仓库，推不了别的仓库）。未配置则跳过。
+      # TAP_DEPLOY_KEY 是仅对 tap 可写的 SSH deploy key。if 不能直接引用 secrets，
+      # 通过 job env 判断是否配置；缺失时跳过检出与更新，仍保留提示。
+      - name: Skip Homebrew cask without deploy key
+        if: github.ref_type == 'tag' && env.HAS_TAP_DEPLOY_KEY != 'true'
+        run: echo "TAP_DEPLOY_KEY 未配置，跳过 cask 更新（需手动 bump reorx/homebrew-tap）"
+
+      - name: Checkout Homebrew tap
+        if: github.ref_type == 'tag' && env.HAS_TAP_DEPLOY_KEY == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: reorx/homebrew-tap
+          ssh-key: ${{ secrets.TAP_DEPLOY_KEY }}
+          path: tap
+
       - name: Bump Homebrew cask
-        if: github.ref_type == 'tag'
-        env:
-          TAP_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+        if: github.ref_type == 'tag' && env.HAS_TAP_DEPLOY_KEY == 'true'
         run: |
-          if [[ -z "$TAP_TOKEN" ]]; then
-            echo "TAP_PUSH_TOKEN 未配置，跳过 cask 更新（需手动 bump reorx/homebrew-tap）"
-            exit 0
-          fi
           VERSION=${GITHUB_REF_NAME#v}
           DMG=(src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
           SHA=$(shasum -a 256 "${DMG[0]}" | cut -d' ' -f1)
-          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/reorx/homebrew-tap.git" /tmp/tap
-          cd /tmp/tap
+          cd tap
           sed -i '' \
             -e "s|^  version \".*\"|  version \"$VERSION\"|" \
             -e "s|^  sha256 \".*\"|  sha256 \"$SHA\"|" \
@@ -137,4 +144,4 @@ jobs:
           fi
           git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
             commit -am "mdnotate $VERSION"
-          git push
+          git push origin HEAD
