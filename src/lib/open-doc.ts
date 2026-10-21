@@ -24,6 +24,7 @@ import {
   type OpenDoc,
   type RecentDoc,
 } from './recent-docs';
+import { confirmLeaveEdits } from './edit-session';
 import { createLatest } from './latest';
 import { loadBody, recordOpen } from './recents-db';
 import { SAMPLE_DOC, SAMPLE_DOC_PATH } from './sample-doc';
@@ -36,6 +37,24 @@ import { announceDoc } from './window-doc';
  * each window has its own reader and its own idea of what it is showing.
  */
 const opens = createLatest();
+
+/**
+ * Whether this window's reader may be given another document. Every open lands
+ * in the window it was asked for in, replacing what is there — so an open is
+ * one more way out of the editor, and has to ask about unsaved edits first.
+ * That includes the same document read again: a reload, or the file opened
+ * once more from Finder, would put the text on disk over the text being
+ * edited.
+ *
+ * Told to stay, the open stops here — quietly, since staying is what the user
+ * just chose. The window was claimed for the new document the moment it was
+ * routed here, so it says again what it really holds.
+ */
+async function mayReplace(): Promise<boolean> {
+  if (await confirmLeaveEdits()) return true;
+  announceDoc();
+  return false;
+}
 
 /**
  * The one way a document reaches the reader. Every entry point — file
@@ -116,6 +135,7 @@ async function readLocator(locator: Locator): Promise<{ locator: Locator; conten
  * showing whatever it had until the new text actually arrives.
  */
 export async function openLocator(locator: Locator): Promise<void> {
+  if (!(await mayReplace())) return;
   const { setOpening } = useAppStore.getState();
   const opening = formatLocator(locator);
   const attempt = opens.start();
@@ -169,7 +189,8 @@ export async function openFileDialog(): Promise<void> {
   if (typeof path === 'string') await openSpec(path);
 }
 
-export function openClipboardText(text: string): Promise<void> {
+export async function openClipboardText(text: string): Promise<void> {
+  if (!(await mayReplace())) return;
   const title = deriveClipboardTitle(text, Date.now());
   // A clipboard document has no path, so its title stands in for one in exports.
   return open(
@@ -224,6 +245,7 @@ export async function reloadDoc(doc: OpenDoc): Promise<void> {
  */
 export async function openRecent(doc: RecentDoc): Promise<void> {
   if (doc.kind !== 'clipboard') return openSpec(doc.source);
+  if (!(await mayReplace())) return;
   const attempt = opens.start();
   const body = await loadBody(doc.id);
   if (body === null) throw new Error(`Clipboard entry "${doc.title}" is no longer stored`);

@@ -4,6 +4,7 @@ import {
   countChars,
   deriveClipboardTitle,
   describeClipboard,
+  describeEdit,
   describeReload,
   fileDocId,
   formatCharCount,
@@ -291,5 +292,44 @@ describe('describeReload', () => {
 
   it('refuses when no document is open', () => {
     expect(describeReload(null).canReload).toBe(false);
+  });
+});
+
+describe('describeEdit', () => {
+  const doc = (patch: Partial<OpenDoc>): OpenDoc => ({
+    id: 'file:/notes/a.md',
+    kind: 'file',
+    title: 'a.md',
+    source: '/notes/a.md',
+    content: 'text',
+    format: 'markdown',
+    contentHash: 'abc',
+    ...patch,
+  });
+
+  it('edits a local file', () => {
+    expect(describeEdit(doc({}))).toEqual({ canEdit: true, title: 'Edit this document' });
+  });
+
+  it('edits plain text the same way as Markdown', () => {
+    expect(describeEdit(doc({ format: 'text', source: '/notes/a.log' })).canEdit).toBe(true);
+  });
+
+  it('refuses a remote file, saying why', () => {
+    expect(describeEdit(doc({ kind: 'ssh', source: 'workbench:notes/a.md' }))).toEqual({
+      canEdit: false,
+      title: 'Editing remote files is not supported yet',
+    });
+  });
+
+  it('refuses clipboard text, which has no file to be saved to', () => {
+    expect(describeEdit(doc({ kind: 'clipboard', source: 'Project Retro' }))).toEqual({
+      canEdit: false,
+      title: 'Clipboard text has no file to save to',
+    });
+  });
+
+  it('refuses when no document is open', () => {
+    expect(describeEdit(null).canEdit).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ import { writeClipboardText } from '../lib/clipboard';
 import { docInfo } from '../lib/doc-info';
 import { isCancelEscape } from '../lib/keys';
 import type { OpenDoc } from '../lib/recent-docs';
+import { useAppStore } from '../store';
 
 /**
  * The document's name in the middle of the title bar, and what it opens: a
@@ -18,6 +19,7 @@ import type { OpenDoc } from '../lib/recent-docs';
  */
 export function DocTitle({ doc }: { doc: OpenDoc }) {
   const [open, setOpen] = useState(false);
+  const dirty = useAppStore((s) => s.dirty);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   // A panel describing one document should not outlive it.
@@ -58,6 +60,9 @@ export function DocTitle({ doc }: { doc: OpenDoc }) {
           onClick={() => setOpen((wasOpen) => !wasOpen)}
         >
           {doc.title}
+          {/* The only sign of unsaved edits there is — there is no Save button
+              to grey out — worded the way every Mac title bar words it. */}
+          {dirty && <span className="font-normal text-neutral-400"> — Edited</span>}
         </button>
         {open && <DocInfoPanel doc={doc} />}
       </div>

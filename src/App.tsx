@@ -1,9 +1,21 @@
 import { useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { House, LoaderCircle, PanelLeft, PanelRight, RotateCw, Settings, SquareArrowOutUpRight } from 'lucide-react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import {
+  BookOpen,
+  House,
+  LoaderCircle,
+  PanelLeft,
+  PanelRight,
+  Pencil,
+  RotateCw,
+  Settings,
+  SquareArrowOutUpRight,
+} from 'lucide-react';
+import { confirmLeaveEdits, startEditing, stopEditing } from './lib/edit-session';
 import { openSpec, reloadDoc } from './lib/open-doc';
-import { describeReload } from './lib/recent-docs';
+import { describeEdit, describeReload } from './lib/recent-docs';
 import { loadSettings } from './lib/settings';
 import { isTauri } from './lib/tauri-env';
 import {
@@ -39,6 +51,7 @@ function App() {
   const opening = useAppStore((s) => s.opening);
   const openDialog = useAppStore((s) => s.openDialog);
   const setOpenDialog = useAppStore((s) => s.setOpenDialog);
+  const editing = useAppStore((s) => s.editing);
 
   // The whole of the theme's effect on the world: the class on <html>, the
   // window's own appearance, and the cache the next cold start reads. Runs
@@ -89,7 +102,32 @@ function App() {
     };
   }, [updateSettings, setOpenDialog]);
 
+  // Closing the window is one more way out of the editor, so it asks first
+  // when there is something unsaved (and quitting, which closes every window,
+  // asks in each). Only listened for while editing: a close request with a
+  // listener is held until the page lets it go, and a window that is only
+  // being read has no reason to make one wait on it.
+  useEffect(() => {
+    if (!isTauri || !editing) return;
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    getCurrentWindow()
+      .onCloseRequested(async (event) => {
+        if (!(await confirmLeaveEdits())) event.preventDefault();
+      })
+      .then((stop) => {
+        if (cancelled) stop();
+        else unlisten = stop;
+      })
+      .catch((e) => setError(String(e)));
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [editing, setError]);
+
   const reload = describeReload(doc);
+  const edit = describeEdit(doc);
 
   // Everything other than the reader is laid over it instead of replacing it:
   // the reader keeps its scroll position, its annotator and its rendered
@@ -145,11 +183,40 @@ function App() {
           </span>
         )}
         <div data-tauri-drag-region className="flex-1" />
+        {/* One button for both ways: it stays where it is and changes colour,
+            so the way back is always under the pointer that came in. The View
+            side is the ramp's darkest, which turns light in dark mode. */}
+        {doc && view === 'reader' &&
+          (editing ? (
+            <button
+              className="flex items-center gap-1.5 rounded bg-neutral-800 px-2.5 py-1 text-[13px] font-medium text-page hover:bg-neutral-700"
+              title="Back to the rendered document"
+              onClick={() => stopEditing().catch((e) => setError(String(e)))}
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              View
+            </button>
+          ) : (
+            <button
+              className="flex items-center gap-1.5 rounded bg-sky-600 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-40 dark:disabled:opacity-25"
+              disabled={!edit.canEdit}
+              title={edit.title}
+              onClick={startEditing}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </button>
+          ))}
+        {/* Greyed rather than hidden while editing, so the button beside it
+            does not shift: the annotations are about the saved text, and may
+            yet move when it is saved again. */}
         {doc && view === 'reader' && (
           <button
             className="flex items-center gap-1.5 rounded bg-amber-500 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40 dark:disabled:opacity-25"
-            disabled={annotationCount === 0}
-            title={annotationCount === 0 ? 'Highlight some text first' : undefined}
+            disabled={annotationCount === 0 || editing}
+            title={
+              editing ? 'Switch to View to export' : annotationCount === 0 ? 'Highlight some text first' : undefined
+            }
             onClick={() => setView('export')}
           >
             <SquareArrowOutUpRight className="h-3.5 w-3.5" />

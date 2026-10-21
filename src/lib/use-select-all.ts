@@ -25,9 +25,18 @@ export interface UseSelectAllOptions {
   enabled: boolean;
 }
 
-/** Somewhere the platform's own select-all is the right answer. */
+/**
+ * Somewhere select-all belongs to the box rather than to us. That includes the
+ * code editor, whose text area is `contenteditable`: it binds ⌘A itself to
+ * select the whole document, and must get the key — the platform's own
+ * select-all there would only reach the lines it has drawn so far.
+ */
 function isTextBox(target: EventTarget | null): boolean {
-  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  );
 }
 
 export function useSelectAll({ targetRef, enabled }: UseSelectAllOptions) {
@@ -40,8 +49,8 @@ export function useSelectAll({ targetRef, enabled }: UseSelectAllOptions) {
       // Plain ⌘A only: ⇧⌘A arrives as the same key with shift held, and is
       // somebody else's shortcut.
       if (event.shiftKey) return;
-      // The find box and the comment box each hold text of their own, and
-      // selecting all of *that* is exactly what is being asked for.
+      // The find box, the comment box and the editor each hold text of their
+      // own, and selecting all of *that* is exactly what is being asked for.
       if (isTextBox(event.target)) return;
 
       event.stopImmediatePropagation();

@@ -4,8 +4,10 @@ import remarkGfm from 'remark-gfm';
 import { useAppStore } from '../store';
 import { createAnnotation, deleteAnnotation, updateComment } from '../lib/annotate';
 import { convertBoxTables } from '../lib/box-table';
+import { rebaseAfterSave, useSaveShortcut } from '../lib/edit-session';
 import { splitFrontMatter } from '../lib/front-matter';
 import { DEFAULT_PANEL_WIDTHS, panelWidthFromPointer, type PanelSide } from '../lib/panels';
+import { collectAnnotatableText } from '../lib/reanchor';
 import { saveSettings } from '../lib/settings';
 import { buildToc, type TocItem } from '../lib/toc';
 import { typographyVars } from '../lib/typography';
@@ -14,6 +16,7 @@ import { useSelectAll } from '../lib/use-select-all';
 import { useTextAnnotator } from '../lib/use-text-annotator';
 import { AnnotationList } from './AnnotationList';
 import { AnnotationPopup } from './AnnotationPopup';
+import { CodeEditor } from './CodeEditor';
 import { CommentMarkers } from './CommentMarkers';
 import { FindBar } from './FindBar';
 import { FrontMatter } from './FrontMatter';
@@ -102,6 +105,8 @@ export function Reader() {
   const view = useAppStore((s) => s.view);
   const openDialog = useAppStore((s) => s.openDialog);
   const annotations = useAppStore((s) => s.annotations);
+  const annotationsHash = useAppStore((s) => s.annotationsHash);
+  const editing = useAppStore((s) => s.editing);
   const typography = useAppStore((s) => s.settings.typography[format]);
   const panels = useAppStore((s) => s.settings.panels);
   const theme = useAppStore((s) => s.resolvedTheme);
@@ -119,6 +124,11 @@ export function Reader() {
   const showingSource = sourceView && format === 'markdown';
 
   useEffect(() => setSourceView(false), [docId]);
+  // Editing replaces whichever view was up, and leaving it comes back to the
+  // rendered document — the one the annotations live in.
+  useEffect(() => {
+    if (editing) setSourceView(false);
+  }, [editing]);
 
   // Split metadata before rewriting CLI tables: a YAML literal block may
   // itself contain a grid that must stay verbatim. Neither transform reaches
@@ -133,7 +143,11 @@ export function Reader() {
     // text there an ordinary selection again: no draft, no popup, no
     // highlights. Switching back rebuilds it from the store, annotations and
     // all — their offsets were only ever measured against the rendered text.
-    enabled: !!content && !showingSource,
+    //
+    // Edit mode drops it the same way, and so does the moment after a save:
+    // until the annotations have been moved onto the new text, the store's
+    // offsets belong to the old one (see the re-anchoring effect below).
+    enabled: !!content && !showingSource && !editing && annotationsHash === contentHash,
     // The text, not just the document. A reload keeps the same id, so keying on
     // the id alone would leave the annotator standing while the prose under it
     // was replaced — painting the old offsets over the new text, which is the
@@ -156,11 +170,25 @@ export function Reader() {
     containerRef: annotator.containerRef,
     scrollRef,
     revision: `${docId}#${contentHash}#${showingSource}`,
-    enabled: !!content && view === 'reader' && !openDialog,
+    enabled: !!content && view === 'reader' && !openDialog && !editing,
     onTakeSelection: annotator.dismissPopup,
   });
 
-  useSelectAll({ targetRef: articleRef, enabled: !!content && view === 'reader' && !openDialog });
+  // In the editor both keys are the editor's own: ⌘F opens its search panel
+  // and ⌘A selects all of its text, not just the lines it has drawn.
+  useSelectAll({ targetRef: articleRef, enabled: !!content && view === 'reader' && !openDialog && !editing });
+  useSaveShortcut(editing && view === 'reader' && !openDialog);
+
+  // A save has just replaced the text under the annotations. The rendered
+  // document is still mounted behind the editor (hidden, not unmounted), so by
+  // the time this runs it shows the new text; collect it in the annotator's
+  // terms and move the annotations onto it. Until that settles the hashes
+  // again, the annotator above stays off.
+  useEffect(() => {
+    const container = annotator.containerRef.current;
+    if (!container || content === null || annotationsHash === contentHash || showingSource) return;
+    rebaseAfterSave(collectAnnotatableText(container));
+  }, [content, contentHash, annotationsHash, showingSource, annotator.containerRef]);
 
   // Collect headings from the rendered DOM: assign slug ids and build the TOC.
   // DOM-derived so ids always match what the sidebar links to — which is why
@@ -252,7 +280,7 @@ export function Reader() {
       {sidebarOpen && (
         <>
           <aside className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50" style={{ width: panels.toc }}>
-            <PanelContent inert={showingSource}>
+            <PanelContent inert={showingSource || editing}>
               <Toc items={toc} activeId={activeId} onJump={jumpTo} />
             </PanelContent>
           </aside>
@@ -266,10 +294,14 @@ export function Reader() {
         {/* Focusable, and the only thing here that is: a click on the prose has
             to land somewhere for ⌘A to mean this document rather than this
             window — and, incidentally, for the space bar and the arrow keys to
-            scroll it at all. */}
+            scroll it at all.
+
+            Hidden rather than unmounted while editing: the rendered document
+            is what a save's re-anchoring reads the new text from. */}
         <div
           ref={scrollRef}
           tabIndex={-1}
+          hidden={editing}
           className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto outline-none"
           style={typographyVars(typography) as CSSProperties}
         >
@@ -318,7 +350,8 @@ export function Reader() {
             )}
           </div>
         </div>
-        {search.open && (
+        {editing && content !== null && <CodeEditor content={content} format={format} typography={typography} />}
+        {search.open && !editing && (
           <FindBar
             query={search.query}
             count={search.count}
@@ -337,6 +370,7 @@ export function Reader() {
             content={content}
             format={format}
             showingSource={showingSource}
+            editing={editing}
             onToggleSource={() => setSourceView((showing) => !showing)}
           />
         )}
@@ -345,7 +379,7 @@ export function Reader() {
         <>
           <PanelResizeHandle side="annotations" containerRef={rootRef} />
           <aside className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50" style={{ width: panels.annotations }}>
-            <PanelContent inert={showingSource}>
+            <PanelContent inert={showingSource || editing}>
               <AnnotationList annotations={annotations} activeId={activeAnnotationId} onJump={jumpToAnnotation} />
             </PanelContent>
           </aside>

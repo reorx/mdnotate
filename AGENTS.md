@@ -1,12 +1,12 @@
 # mdnotate — Agent 参考卡
 
-**Markdown Annotate**：Tauri v2 桌面应用（macOS），作为本地 `.md` 文件的默认打开方式，用于阅读 + 划词高亮/评论，最后按模板导出为 Markdown 引用块。也能通过 `mdnotate://` 链接打开、经 ssh 读取远端文件，并附带一个 `mdnotate` 命令行。**只读，不提供编辑功能。**
+**Markdown Annotate**：Tauri v2 桌面应用（macOS），作为本地 `.md` 文件的默认打开方式，用于阅读 + 划词高亮/评论，最后按模板导出为 Markdown 引用块。也能通过 `mdnotate://` 链接打开、经 ssh 读取远端文件，并附带一个 `mdnotate` 命令行。本地文件可以切到代码编辑器修改、⌘S 保存（编辑模式）；远端与剪切板文档只读。
 
 本文件只放规则和指路；每条规则背后的完整理由在 `kb/docs/`（见文末索引）和代码注释里。
 
 ## 技术栈
 
-Tauri v2 + React 19 + Vite 7 + TypeScript + Tailwind v4 + zustand。pnpm 管理依赖，Node 由 `mise.toml` 固定为 24。Markdown 渲染用 react-markdown + remark-gfm；标注用 `@recogito/text-annotator`。存储是 `tauri-plugin-sql`（SQLite）+ `tauri-plugin-store`。
+Tauri v2 + React 19 + Vite 7 + TypeScript + Tailwind v4 + zustand。pnpm 管理依赖，Node 由 `mise.toml` 固定为 24。Markdown 渲染用 react-markdown + remark-gfm；标注用 `@recogito/text-annotator`；编辑器是 CodeMirror 6（自己封装，不用 React wrapper）。存储是 `tauri-plugin-sql`（SQLite）+ `tauri-plugin-store`。
 
 扁平单包结构（**不是** monorepo）；Rust 侧是一个两成员的 cargo workspace（app + CLI）。
 
@@ -16,6 +16,8 @@ Tauri v2 + React 19 + Vite 7 + TypeScript + Tailwind v4 + zustand。pnpm 管理�
 src/lib/          纯逻辑 + hook，按主题：
   打开文档     open-doc（唯一入口）、doc-locator（spec / 链接语法、格式判定）、path-input、
                path-prefix、recent-docs（文档模型与 docId）、latest、window-doc、clipboard
+  编辑         edit-session（编辑的唯一入口）、use-code-editor（CodeMirror 封装）、edit-text、
+               edit-prompts、doc-file、reanchor（保存后标注按原文重新定位）
   标注         annotate（改标注的唯一入口）、annotations、use-text-annotator（recogito 封装）、
                popup-position、annotation-markers、template（导出模板）
   阅读器       search + use-doc-search + find-painter（⌘F）、use-select-all（⌘A）、
@@ -28,7 +30,7 @@ src/lib/          纯逻辑 + hook，按主题：
 src/components/   Home 与它的卡片（OpenFileCard / ClipboardCard / DefaultAppCard / CliInstallCard，
                   共用 ActionCard 的壳）、PathEntry + PrefixCombobox（首页与 ⌘O 面板共用）、
                   OpenDialog、RecentList、Reader（正文 + 两侧栏）、Toc、AnnotationList、
-                  AnnotationPopup、CommentMarkers、FindBar、StatusBar、DocTitle、
+                  AnnotationPopup、CommentMarkers、CodeEditor、FindBar、StatusBar、DocTitle、
                   ExportView、SettingsView、FrontMatter（正文顶部的元数据字段列表）
 src/store.ts      zustand 全局状态，每个窗口一份
 src/App.css       样式与深色调色板；find-highlight.css 单独装 ::highlight() 规则
@@ -75,14 +77,14 @@ pnpm build:signed  # 构建 + 签名 + 公证，产物可安装进 /Applications
 - **⌘N 开出的空窗口不能标 `taken`**，否则下一篇文档会另开窗口而不是填进去。
 - **打开失败也要 `announceDoc()`**：窗口在路由那一刻就被标成装着该文档了。
 - **「打开成功关掉 ⌘O 面板」只写在 `store.ts` 的 `openDoc` 里**；落区的 drop 事件里 JS 不自己打开文件，Rust 已经开过了。
-- **菜单是在 `Menu::default()` 上打补丁**，不要整个重建。
+- **菜单是在 `Menu::default()` 上打补丁**，不要整个重建。唯一替换掉的预定义项是 App 菜单的 Quit（见「编辑」）。
 - **跨语言的重复要同步改**：可打开的扩展名（`doc-locator.ts` ↔ `lib.rs`）、本地文件的 docId（`recent-docs.ts` ↔ `lib.rs`）、shell 转义（`lib.rs` ↔ `cli/src/quote.rs`）。
 
 细节在 `kb/docs/window-routing.md`（路由、注册表、冷启动、菜单、⌘O 面板）和 `kb/docs/opening-documents.md`（spec 与链接的写法、ssh 读取、格式、路径输入、prefix + suffix、剪切板）。改 `lib.rs` 的路由部分、`open-doc.ts`、`doc-locator.ts` 之前先读。
 
 ### 权限
 
-`capabilities/default.json` 的 `"windows"` 必须是 `["main", "doc-*"]`，漏了新窗口就是零权限且静默失效。`sql:allow-execute`、`core:window:allow-set-title`、`core:window:allow-set-theme` 都不在各自的 default 集里，要单独声明。
+`capabilities/default.json` 的 `"windows"` 必须是 `["main", "doc-*"]`，漏了新窗口就是零权限且静默失效。`sql:allow-execute`、`core:window:allow-set-title`、`core:window:allow-set-theme`、`core:window:allow-destroy`（关窗确认放行时调用）都不在各自的 default 集里，要单独声明。
 
 ### 数据
 
@@ -105,6 +107,16 @@ pnpm build:signed  # 构建 + 签名 + 公证，产物可安装进 /Applications
 - 纯图标按钮用 `IconButton`，不手写裸 `<button>`。
 
 细节在 `kb/docs/annotations-and-export.md`：失效判定、弹窗与落点、评论图标层、侧栏、两层导出模板的按行规则。改 `use-text-annotator.ts`、`template.ts` 或标注相关组件之前先读。
+
+### 编辑
+
+- **编辑状态只经 `edit-session.ts` 改**；编辑器文本不进 store，store 只有 `editing` / `dirty`。
+- **任何会替换或关掉编辑器的入口都先过 `confirmLeaveEdits()`**：View 按钮、关窗（只在编辑时注册 `onCloseRequested`）、自定义 Quit、`open-doc` 的各入口（`mayReplace`）。新入口走 `open-doc` 就自动带上。
+- **编辑时渲染正文只 `hidden` 不卸载**，保存后的重新定位从它取文本。标注层启用条件含 `annotationsHash === contentHash`，两者不等就是「刚保存、标注还没挪」。
+- `write_local_file` 原地写；冲突（mtime 变了）是返回值不是错误。
+- ⌘Q 是自己的菜单项：tao 不实现 `applicationShouldTerminate:`，系统 Quit 拦不住。Dock 退出 / 注销仍会丢未保存改动。
+
+细节在 `kb/docs/editing.md`：保存与冲突、BOM / CRLF、重新定位规则、离开确认的全部入口。改 `edit-session.ts`、`use-code-editor.ts`、Quit 菜单之前先读。
 
 ### 阅读器界面
 
@@ -175,6 +187,7 @@ tap 写权限使用本仓库的 `TAP_DEPLOY_KEY` secret（仅对 tap 可写的 S
 
 - `kb/docs/window-routing.md` —— 改多窗口路由、窗口注册表、冷启动、File 菜单、⌘O 面板时读
 - `kb/docs/opening-documents.md` —— 改文档的读取、spec / 链接语法、ssh 远端、路径输入、prefix 补全、剪切板入口时读
+- `kb/docs/editing.md` —— 改编辑模式、保存、离开确认、保存后标注重新定位、Quit 菜单时读
 - `kb/docs/annotations-and-export.md` —— 改标注、弹窗、评论图标、标注侧栏、导出模板时读
 - `kb/docs/reader-ui.md` —— 改阅读页布局、⌘F、⌘A、源码视图、键盘与输入法处理时读
 - `kb/docs/theme-and-typography.md` —— 新写组件、改颜色、主题或排版时读

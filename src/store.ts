@@ -18,6 +18,18 @@ interface AppState {
    */
   openDialog: boolean;
   annotations: Annotation[];
+  /**
+   * The content hash the annotations' offsets were measured on. The same as
+   * `doc.contentHash` except in the moment after a save, when the text has
+   * changed and the annotations have yet to be moved onto it — the reader keeps
+   * the annotator off until the two agree again, or it would paint old offsets
+   * over new prose.
+   */
+  annotationsHash: string | null;
+  /** The document is shown in the code editor rather than rendered. */
+  editing: boolean;
+  /** The editor holds text that differs from what was last read or saved. */
+  dirty: boolean;
   /** The persisted preferences, mirrored here so the UI reads them synchronously. */
   settings: Settings;
   /**
@@ -32,6 +44,12 @@ interface AppState {
   /** What is being fetched right now, shown in the toolbar; null when nothing is. */
   opening: string | null;
   openDoc: (doc: OpenDoc, annotations?: Annotation[]) => void;
+  setEditing: (editing: boolean) => void;
+  setDirty: (dirty: boolean) => void;
+  /** The text just written to disk becomes the document's text. */
+  applySave: (saved: { content: string; contentHash: string; modifiedAt?: number }) => void;
+  /** Annotations moved onto the text whose hash is given. */
+  rebaseAnnotations: (annotations: Annotation[], hash: string) => void;
   setError: (error: string | null) => void;
   setOpening: (opening: string | null) => void;
   setView: (view: View) => void;
@@ -62,6 +80,9 @@ export const useAppStore = create<AppState>((set) => ({
   annotationsOpen: false,
   openDialog: false,
   annotations: [],
+  annotationsHash: null,
+  editing: false,
+  dirty: false,
   settings: { ...DEFAULT_SETTINGS, theme: cachedTheme },
   resolvedTheme: resolveTheme(cachedTheme, systemPrefersDark()),
   error: null,
@@ -75,8 +96,29 @@ export const useAppStore = create<AppState>((set) => ({
   // entry, the system dialog, a file dragged in, even one double-clicked in
   // Finder while the panel is up — ends in this one call, so none of them has
   // to remember to get the panel out of the way.
+  //
+  // So is going back to reading: a document always opens rendered, and any
+  // edits to the one before it were saved or let go before it got this far
+  // (see `edit-session`).
   openDoc: (doc, annotations = []) =>
-    set({ doc, annotations, view: 'reader', error: null, openDialog: false }),
+    set({
+      doc,
+      annotations,
+      annotationsHash: doc.contentHash,
+      editing: false,
+      dirty: false,
+      view: 'reader',
+      error: null,
+      openDialog: false,
+    }),
+  // Leaving the editor throws its text away, so nothing is unsaved any more.
+  setEditing: (editing) => set(editing ? { editing } : { editing, dirty: false }),
+  setDirty: (dirty) => set({ dirty }),
+  // The annotations are left exactly as they are: their offsets still belong
+  // to the old text, and `annotationsHash` says so until they are re-anchored.
+  applySave: ({ content, contentHash, modifiedAt }) =>
+    set((s) => (s.doc ? { doc: { ...s.doc, content, contentHash, modifiedAt }, dirty: false } : {})),
+  rebaseAnnotations: (annotations, annotationsHash) => set({ annotations, annotationsHash }),
   setError: (error) => set({ error }),
   setOpening: (opening) => set({ opening }),
   setView: (view) => set({ view }),

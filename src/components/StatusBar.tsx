@@ -9,6 +9,8 @@ interface StatusBarProps {
   format: DocFormat;
   /** Whether the document is currently shown as its own source text. */
   showingSource: boolean;
+  /** Whether the document is open in the code editor. */
+  editing: boolean;
   onToggleSource: () => void;
 }
 
@@ -20,7 +22,7 @@ interface StatusBarProps {
  * It belongs to the middle column alone, between the two panel dividers, and
  * sits outside the scroller so it stays put while the document moves.
  */
-export function StatusBar({ content, format, showingSource, onToggleSource }: StatusBarProps) {
+export function StatusBar({ content, format, showingSource, editing, onToggleSource }: StatusBarProps) {
   // Measuring an eight-megabyte document walks all of it, twice. Once per
   // document is fine; once per render would not be.
   const stats = useMemo(() => docStats(content), [content]);
@@ -44,21 +46,31 @@ export function StatusBar({ content, format, showingSource, onToggleSource }: St
           only sign of it — and looks like something broken. `min-w-0` so a
           narrow window clips this line rather than pushing the buttons out. */}
       {showingSource && <span className="min-w-0 truncate text-neutral-400">Annotations are off in source view</span>}
-      <StatusButton label={copied ? 'Copied' : `Copy ${sourceLabel}`} onClick={copy}>
-        {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
-      </StatusButton>
-      {/* Plain text is already its own source; there is no second view of it to
-          switch to. */}
-      {format === 'markdown' && (
-        <StatusButton
-          label={showingSource ? 'Back to the rendered document' : 'View Markdown source'}
-          // Lit while it is on: this is the one button here that leaves the
-          // reader in a different state than it found it.
-          className={showingSource ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : undefined}
-          onClick={onToggleSource}
-        >
-          {showingSource ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-        </StatusButton>
+      {/* There is no Save button, so this is where saving is mentioned at all.
+          Copying and the source view are both about the text as saved, which
+          is not what is on screen while editing; they wait for View. The counts
+          are of the saved text too, and say so by not moving as you type. */}
+      {editing ? (
+        <span className="min-w-0 truncate text-neutral-400">Editing · ⌘S to save</span>
+      ) : (
+        <>
+          <StatusButton label={copied ? 'Copied' : `Copy ${sourceLabel}`} onClick={copy}>
+            {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+          </StatusButton>
+          {/* Plain text is already its own source; there is no second view of
+              it to switch to. */}
+          {format === 'markdown' && (
+            <StatusButton
+              label={showingSource ? 'Back to the rendered document' : 'View Markdown source'}
+              // Lit while it is on: this is the one button here that leaves the
+              // reader in a different state than it found it.
+              className={showingSource ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : undefined}
+              onClick={onToggleSource}
+            >
+              {showingSource ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </StatusButton>
+          )}
+        </>
       )}
     </div>
   );

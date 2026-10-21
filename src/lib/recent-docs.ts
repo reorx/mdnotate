@@ -234,6 +234,30 @@ export function describeReload(doc: OpenDoc | null): ReloadAbility {
   return { canReload: true, title: 'Reload from disk' };
 }
 
+export interface EditAbility {
+  canEdit: boolean;
+  /** The Edit button's tooltip: what it does, or why it cannot. */
+  title: string;
+}
+
+/**
+ * Whether the open document can be edited and saved, and what the button
+ * offering to do it should say.
+ *
+ * Saving means writing the text back where it came from, so only a document
+ * with somewhere to write to qualifies. A local file does. Clipboard text lives
+ * in our own database and its id is a hash of its content, so a "save" would
+ * make it a different document. A remote file could be written back over ssh,
+ * but a dropped connection halfway through a write leaves a truncated file on
+ * the other machine — not something to take on as a side effect.
+ */
+export function describeEdit(doc: OpenDoc | null): EditAbility {
+  if (!doc) return { canEdit: false, title: 'No document to edit' };
+  if (doc.kind === 'clipboard') return { canEdit: false, title: 'Clipboard text has no file to save to' };
+  if (doc.kind === 'ssh') return { canEdit: false, title: 'Editing remote files is not supported yet' };
+  return { canEdit: true, title: 'Edit this document' };
+}
+
 /**
  * Apply an open to a recents list: the entry replaces any earlier one carrying
  * the same id, the list stays newest-first, and it never grows past the cap.

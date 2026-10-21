@@ -1,5 +1,6 @@
 ---
 created: 2026-09-28
+updated: 2026-10-21
 tags:
   - multi-window
   - routing
@@ -92,6 +93,8 @@ File 里是 `New Window ⌘N` / `Open… ⌘O` / 分隔线 / `Close Window ⌘W`
 - 保住 Edit 子菜单里的 Select All ⌘A，正文的 ⌘A 实现以它存在为前提。
 
 `"File"` 是 Tauri 硬编码的英文，所以有兜底：找不到就自己建一个 File 插到 index 1。升级 Tauri 后菜单栏值得瞄一眼 —— 真变了会看到两个 File，而不是 ⌘O / ⌘N 悄悄消失。
+
+App 菜单里唯一被换掉的是 Quit：系统自带的那项发 `terminate:`，tao 不实现 `applicationShouldTerminate:`，有未保存编辑的窗口没机会插话。自己的 Quit（仍是 ⌘Q）改为逐个关闭窗口，让每个窗口走自己的关窗确认（见 `editing.md`）。按文字和位置都找不到系统 Quit 时保留原样，宁可 ⌘Q 不问也不能没有退出项。
 
 菜单 id 字符串只出现在 `menu.rs` 里，`run()` 只认 `MenuAction` enum。
 

@@ -434,6 +434,27 @@ fn open_dialog(app: &AppHandle) {
     }
 }
 
+/// mdnotate ▸ Quit (⌘Q): close every window, each the way its own close button
+/// would, rather than terminating on the spot. A window with unsaved edits
+/// asks Save / Don't Save / Cancel before it goes (its frontend intercepts the
+/// close request); a clean one simply closes; and once the last is gone the
+/// app exits as it always does. A Cancel stops the quit with that window still
+/// open — the clean ones already closed stay closed.
+///
+/// The system's own Quit cannot do this: tao never answers
+/// `applicationShouldTerminate:`, so `terminate:` goes straight to exiting and
+/// `ExitRequested` is not consulted. See `menu.rs`.
+fn quit(app: &AppHandle) {
+    let windows = app.webview_windows();
+    if windows.is_empty() {
+        app.exit(0);
+        return;
+    }
+    for window in windows.values() {
+        let _ = window.close();
+    }
+}
+
 fn open_path(app: &AppHandle, path: &Path, dropped_on: Option<&str>) {
     if let Some(resolved) = resolve_openable_path(path) {
         let doc_id = file_doc_id(&resolved);
@@ -495,6 +516,46 @@ fn read_local_file(path: String) -> Result<LocalFile, String> {
         path: canonical.to_string_lossy().into_owned(),
         content,
         modified,
+    })
+}
+
+/// How a save went. A conflict is an answer rather than an error: the file has
+/// been written by something else since we last knew it, nothing was written,
+/// and whether to write anyway is the user's call.
+#[derive(serde::Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum WriteOutcome {
+    Saved { modified: Option<u64> },
+    Conflict,
+}
+
+/// Whether the file has been written since `expected`. Only a recorded time
+/// that differs counts: with no time to compare — a filesystem that keeps
+/// none, or a file that has since gone — writing simply puts it (back) there.
+fn write_conflicts(expected: Option<u64>, current: Option<u64>) -> bool {
+    matches!((expected, current), (Some(expected), Some(current)) if expected != current)
+}
+
+/// Save a document back to its local file.
+///
+/// In place rather than through a temporary file and a rename: a rename gives
+/// the file a new inode, which breaks hard links, drops whatever extended
+/// attributes the old one carried, and makes editors and watchers holding the
+/// file see it deleted. A local write of a text file is quick enough not to
+/// need the protection a rename buys.
+///
+/// `expected_modified` is the modification time the frontend last read or
+/// wrote; `None` writes regardless, which is how an overwrite the user agreed
+/// to is asked for.
+#[tauri::command]
+fn write_local_file(path: String, content: String, expected_modified: Option<u64>) -> Result<WriteOutcome, String> {
+    let file = Path::new(&path);
+    if write_conflicts(expected_modified, modified_millis(file)) {
+        return Ok(WriteOutcome::Conflict);
+    }
+    std::fs::write(file, content).map_err(|e| format!("Failed to write {path}: {e}"))?;
+    Ok(WriteOutcome::Saved {
+        modified: modified_millis(file),
     })
 }
 
@@ -730,7 +791,19 @@ fn start_window_drag(window: tauri::Window) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{choose_target, modified_millis, spawn_entry, Incoming, Target, WindowState};
+    use super::{choose_target, modified_millis, spawn_entry, write_conflicts, Incoming, Target, WindowState};
+
+    /// A save is refused only when the file carries a modification time and it
+    /// is not the one the frontend last saw.
+    #[test]
+    fn a_write_conflicts_only_when_the_file_was_written_since() {
+        assert!(!write_conflicts(Some(100), Some(100)));
+        assert!(write_conflicts(Some(100), Some(200)));
+        // Asked to write regardless: an overwrite the user agreed to.
+        assert!(!write_conflicts(None, Some(200)));
+        // Nothing on disk to compare with — gone, or never timed: write it back.
+        assert!(!write_conflicts(Some(100), None));
+    }
 
     /// The unit is the thing worth pinning down: seconds where milliseconds were
     /// meant would read back as a date in 1970 without failing anywhere.
@@ -908,6 +981,7 @@ pub fn run() {
         .on_menu_event(|app, event| match menu::menu_action(event.id().0.as_str()) {
             Some(menu::MenuAction::NewWindow) => new_window(app),
             Some(menu::MenuAction::OpenFile) => open_dialog(app),
+            Some(menu::MenuAction::Quit) => quit(app),
             // Every predefined item — quit, close, copy — arrives here too.
             None => {}
         })
@@ -935,6 +1009,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_local_file,
             read_remote_file,
+            write_local_file,
             take_pending_doc,
             set_window_doc,
             markdown_default_app_status,

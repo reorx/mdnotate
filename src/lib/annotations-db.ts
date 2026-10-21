@@ -83,6 +83,32 @@ export async function recordAnnotation(docId: string, docHash: string, annotatio
   );
 }
 
+/**
+ * Move a document's annotations onto the text it was just saved as: the ones
+ * found again take the new hash and offsets, the ones that were not are gone.
+ *
+ * The exception to "quote and offsets are fixed once committed" — the only
+ * time offsets change is when the text under them does, and this is that time.
+ */
+export async function rebaseAnnotations(
+  docId: string,
+  docHash: string,
+  kept: Annotation[],
+  lostIds: string[],
+): Promise<void> {
+  if (!isTauri) return fallback.rebase(docId, docHash, kept, lostIds);
+  const conn = await db();
+  for (const annotation of kept) {
+    await conn.execute(
+      'UPDATE annotations SET doc_hash = $1, start_offset = $2, end_offset = $3 WHERE id = $4 AND doc_id = $5',
+      [docHash, annotation.start, annotation.end, annotation.id, docId],
+    );
+  }
+  for (const id of lostIds) {
+    await conn.execute('DELETE FROM annotations WHERE id = $1', [id]);
+  }
+}
+
 export async function forgetAnnotation(id: string): Promise<void> {
   if (!isTauri) return fallback.forget(id);
   await (await db()).execute('DELETE FROM annotations WHERE id = $1', [id]);
@@ -136,6 +162,18 @@ const fallback = {
   },
   async forget(id: string) {
     fallback.write(fallback.read().filter((r) => r.id !== id));
+  },
+  async rebase(docId: string, docHash: string, kept: Annotation[], lostIds: string[]) {
+    const moved = new Map(kept.map((a) => [a.id, a]));
+    fallback.write(
+      fallback
+        .read()
+        .filter((r) => !lostIds.includes(r.id))
+        .map((r) => {
+          const annotation = r.docId === docId ? moved.get(r.id) : undefined;
+          return annotation ? { ...r, docHash, start: annotation.start, end: annotation.end } : r;
+        }),
+    );
   },
   async counts(): Promise<Record<string, number>> {
     const counts: Record<string, number> = {};
