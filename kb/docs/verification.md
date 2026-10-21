@@ -1,5 +1,6 @@
 ---
 created: 2026-09-28
+updated: 2026-10-21
 tags:
   - testing
   - verification
@@ -44,7 +45,7 @@ mouse move → mouse down → mouse move（中间点）→ mouse move（终点�
 ## Rust 与数据库
 
 1. `pnpm tauri dev` 起实例。
-2. 用 `src-tauri/target/debug/mdnotate '<spec>'` 触发 single-instance 转发。spec 可以是路径、`host:path`、或 `mdnotate://open?path=…`。
+2. 用 debug 二进制 `<target-dir>/debug/mdnotate '<spec>'` 触发 single-instance 转发。spec 可以是路径、`host:path`、或 `mdnotate://open?path=…`。target-dir 默认是 `src-tauri/target/`，但本机 `~/.cargo/config.toml` 全局设成了 `~/Library/Caches/cargo-target`。
 3. `sqlite3` 直接查库断言。
 
 注意：

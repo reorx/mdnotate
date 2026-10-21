@@ -207,7 +207,8 @@ export async function openClipboardText(text: string): Promise<void> {
 }
 
 /** The way in when there is no file to open: dev in a plain browser. */
-export function openSampleDoc(): Promise<void> {
+export async function openSampleDoc(): Promise<void> {
+  if (!(await mayReplace())) return;
   return open(
     {
       id: fileDocId(SAMPLE_DOC_PATH),

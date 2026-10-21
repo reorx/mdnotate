@@ -166,7 +166,7 @@ pnpm build:signed  # 构建 + 签名 + 公证，产物可安装进 /Applications
 
 - **Tauri 窗口没法用 agent-browser 驱动**，截图和 System Events 也被 TCC 挡住。界面改动尽量在 `pnpm dev` 的浏览器模式里验，其余靠人眼。
 - 浏览器模式里划词必须用真实鼠标序列（`mouse move → down → move → move → up`），合成事件无效。
-- Rust + SQLite：起 `pnpm tauri dev`，用 `src-tauri/target/debug/mdnotate '<spec>'` 转发文档，再 `sqlite3` 查库。
+- Rust + SQLite：起 `pnpm tauri dev`，用 debug 二进制 `<target-dir>/debug/mdnotate '<spec>'` 转发文档，再 `sqlite3` 查库。本机 `~/.cargo/config.toml` 把 target-dir 设成了 `~/Library/Caches/cargo-target`，不在 `src-tauri/target/`。
 - 冷启动、文件关联、链接只能用打包产物验；测完 `lsregister -u <built app>`。
 - 杀 dev 实例要两条：`pkill -f "tauri dev"; pkill -f "target/debug/mdnotate"`。
 - 同时改了 Rust 和前端、现象解释不通时，先整个重启再下结论。

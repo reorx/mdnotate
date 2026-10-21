@@ -199,6 +199,16 @@ describe('edit session', () => {
       expect(useAppStore.getState().doc?.modifiedAt).toBe(300);
     });
 
+    it('writes nothing when nothing is unsaved', async () => {
+      // A reflexive ⌘S must not touch the file: it would bump its modified
+      // time, and after an outside edit offer to overwrite that edit with text
+      // the user never changed.
+      useAppStore.getState().openDoc(DOC);
+      useAppStore.getState().setEditing(true);
+      expect(await saveEdits()).toBe(true);
+      expect(writeDocFile).not.toHaveBeenCalled();
+    });
+
     it('does nothing outside edit mode', async () => {
       useAppStore.getState().openDoc(DOC);
       expect(await saveEdits()).toBe(false);

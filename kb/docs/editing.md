@@ -1,5 +1,6 @@
 ---
 created: 2026-10-21
+updated: 2026-10-21
 tags:
   - editor
   - codemirror
@@ -41,6 +42,7 @@ React 封装通常用 `value` prop 驱动编辑器，方向反了：store 里的
 - 写的是用户原来的文件加上他的改动，不多也不少。编辑器内部只认 `\n`、不认 BOM，所以全程 CRLF 的文件进编辑器前转成 LF、保存时转回去，开头的 BOM 同理剥掉再补回。换行混杂的文件没有单一惯例可保留，保存后统一为 LF。
 - 原地写入，不走「临时文件 + 改名」：改名会换 inode，打断硬链接、丢掉扩展属性，还会让外部编辑器和 watcher 以为文件被删了。本地写一个文本文件足够快，用不着改名换来的那点原子性。
 - **按修改时间判冲突。** 打开（或上一次保存）时记下文件的修改时间，保存前对比磁盘上的；不一样说明别的程序写过它，直接覆盖会把那份改动悄悄丢掉。这时什么都不写，先问「是否覆盖」。文件已经不在、或文件系统不记时间，就直接写回。
+- 没有改动时 ⌘S 什么都不做。照写不误会白白刷新修改时间；文件刚在外部被改过时，还会问要不要拿用户根本没动过的文本去覆盖。
 - 同一时刻只跑一次保存：连按 ⌘S 共享第一次的结果，否则第二次写会被第一次写出的新修改时间判成冲突。
 - 保存期间继续打的字不算进这次保存，仍是未保存。
 - 写失败（权限、磁盘满）在错误条里说明原因，改动留在编辑器里。
@@ -77,7 +79,9 @@ Save 成功后继续原操作，保存失败或拒绝覆盖则留在编辑器；
 
 ### ⌘Q 与它管不到的退出
 
-系统自带的 Quit 发的是 `terminate:`，而 tao 没有实现 `applicationShouldTerminate:`，app 当场退出，没有窗口能插话。所以 App 菜单里的 Quit 换成了自己的菜单项（仍是 ⌘Q）：逐个关闭窗口，每个窗口各自走关窗确认，最后一个关掉后 app 照常退出。中途有窗口选了 Cancel，退出就停在那里；之前已经关掉的无改动窗口不会恢复。
+系统自带的 Quit 发的是 `terminate:`，而 tao 没有实现 `applicationShouldTerminate:`，app 当场退出，没有窗口能插话。所以 App 菜单里的 Quit 换成了自己的菜单项（仍是 ⌘Q）：从最前面的窗口开始逐个关闭，前一个真正关掉了才关下一个，每个窗口各自走关窗确认，最后一个关掉后 app 退出。
+
+必须一个一个来：一次全关，所有窗口的确认会同时弹出，在一个窗口里选 Cancel 也收不回另一个窗口里已经选了的 Don't Save。中途有窗口选了 Cancel，退出就停在那里（该窗口告诉 Rust 停止）；之前已经关掉的窗口不会恢复。
 
 Dock 菜单的「退出」、注销和关机走的仍是 `terminate:`，没有菜单项可换，这几条路径上未保存的改动会丢。
 
@@ -91,5 +95,5 @@ Dock 菜单的「退出」、注销和关机走的仍是 `terminate:`，没有�
 - `src/lib/recent-docs.ts` 的 `describeEdit` —— 哪些文档能编辑
 - `src/store.ts` 的 `editing` / `dirty` / `annotationsHash`（`tests/edit-mode.test.ts`）
 - `src/lib/open-doc.ts` 的 `mayReplace` —— 打开入口的离开确认
-- `src-tauri/src/lib.rs` 的 `write_local_file`、`quit`；`src-tauri/src/menu.rs` 的 `replace_quit`
+- `src-tauri/src/lib.rs` 的 `write_local_file`、`quit` / `close_next_for_quit` / `cancel_quit`；`src-tauri/src/menu.rs` 的 `replace_quit`
 - 计划：`kb/plans/2026-10-21-edit-mode.md`

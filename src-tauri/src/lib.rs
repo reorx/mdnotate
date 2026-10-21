@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use tauri::utils::config::WindowConfig;
@@ -138,6 +138,10 @@ struct Incoming {
 /// `Some` while the app is still starting: the buffer, and the fact that it is
 /// still needed, are the same thing.
 struct ColdStart(Mutex<Option<Vec<Incoming>>>);
+
+/// Set while Quit is closing the windows one by one; cleared when one of them
+/// refuses (see `quit` and `cancel_quit`).
+struct Quitting(AtomicBool);
 
 /// The extensions worth opening. Must stay in step with `OPENABLE_EXTENSIONS`
 /// in `src/lib/doc-locator.ts`, which is the tested copy of this rule; this one
@@ -434,25 +438,52 @@ fn open_dialog(app: &AppHandle) {
     }
 }
 
-/// mdnotate ▸ Quit (⌘Q): close every window, each the way its own close button
+/// mdnotate ▸ Quit (⌘Q): close the windows, each the way its own close button
 /// would, rather than terminating on the spot. A window with unsaved edits
 /// asks Save / Don't Save / Cancel before it goes (its frontend intercepts the
-/// close request); a clean one simply closes; and once the last is gone the
-/// app exits as it always does. A Cancel stops the quit with that window still
-/// open — the clean ones already closed stay closed.
+/// close request); a clean one simply closes.
+///
+/// One at a time, front window first: the next is only asked once the last is
+/// gone (`Destroyed` calls `close_next_for_quit`). Closing them all at once
+/// would put up every window's question together, and a Cancel in one could
+/// not take back the Don't Save already given in another. A Cancel ends the
+/// quit with that window still open; the ones already closed stay closed.
 ///
 /// The system's own Quit cannot do this: tao never answers
 /// `applicationShouldTerminate:`, so `terminate:` goes straight to exiting and
 /// `ExitRequested` is not consulted. See `menu.rs`.
 fn quit(app: &AppHandle) {
-    let windows = app.webview_windows();
-    if windows.is_empty() {
-        app.exit(0);
-        return;
+    app.state::<Quitting>().0.store(true, Ordering::SeqCst);
+    close_next_for_quit(app, None);
+}
+
+/// The next step of a quit: close the front window other than `gone` (which is
+/// being destroyed and may still be listed), or exit when none is left.
+fn close_next_for_quit(app: &AppHandle, gone: Option<&str>) {
+    let mut windows: Vec<(String, WebviewWindow)> = app
+        .webview_windows()
+        .into_iter()
+        .filter(|(label, _)| Some(label.as_str()) != gone)
+        .collect();
+    windows.sort_by_key(|(label, _)| std::cmp::Reverse(label_order(label)));
+    let next = windows
+        .iter()
+        .find(|(_, window)| window.is_focused().unwrap_or(false))
+        .or_else(|| windows.first());
+    match next {
+        Some((_, window)) => {
+            let _ = window.close();
+        }
+        None => app.exit(0),
     }
-    for window in windows.values() {
-        let _ = window.close();
-    }
+}
+
+/// A window turning a close request down — the user chose Cancel over unsaved
+/// edits. Whatever quit was under way stops there. Sent on every refusal, quit
+/// or not: outside a quit it changes nothing.
+#[tauri::command]
+fn cancel_quit(state: tauri::State<'_, Quitting>) {
+    state.0.store(false, Ordering::SeqCst);
 }
 
 fn open_path(app: &AppHandle, path: &Path, dropped_on: Option<&str>) {
@@ -1058,10 +1089,12 @@ pub fn run() {
         .manage(Windows(Mutex::new(HashMap::new())))
         .manage(NextLabel(AtomicUsize::new(1)))
         .manage(ColdStart(Mutex::new(Some(Vec::new()))))
+        .manage(Quitting(AtomicBool::new(false)))
         .invoke_handler(tauri::generate_handler![
             read_local_file,
             read_remote_file,
             write_local_file,
+            cancel_quit,
             take_pending_doc,
             set_window_doc,
             markdown_default_app_status,
@@ -1085,9 +1118,11 @@ pub fn run() {
             // Nothing is left of a closed window but its entry, which would
             // otherwise go on claiming a document nobody is reading.
             tauri::WindowEvent::Destroyed => {
-                let state = window.state::<Windows>();
-                let mut windows = state.0.lock().unwrap();
-                windows.remove(window.label());
+                window.state::<Windows>().0.lock().unwrap().remove(window.label());
+                // A quit in progress moves on to the next window.
+                if window.state::<Quitting>().0.load(Ordering::SeqCst) {
+                    close_next_for_quit(window.app_handle(), Some(window.label()));
+                }
             }
             _ => {}
         })

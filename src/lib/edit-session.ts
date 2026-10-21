@@ -85,9 +85,13 @@ export function saveEdits(): Promise<boolean> {
 }
 
 async function save(): Promise<boolean> {
-  const { doc, editing, setError } = useAppStore.getState();
+  const { doc, editing, dirty, setError } = useAppStore.getState();
   const editor = live;
   if (!doc || !editing || !editor) return false;
+  // Nothing to save is a save that succeeded. Writing anyway would bump the
+  // file's modified time for nothing — and after an outside edit, offer to
+  // overwrite it with text the user never touched.
+  if (!dirty) return true;
 
   // Taken now: whatever is typed while the write is under way is not in it,
   // and stays unsaved.

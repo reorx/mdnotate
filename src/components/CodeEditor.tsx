@@ -1,4 +1,5 @@
 import { useRef, type CSSProperties } from 'react';
+import { useAppStore } from '../store';
 import type { DocFormat } from '../lib/doc-locator';
 import { typographyVars, type Typography } from '../lib/typography';
 import { useCodeEditor } from '../lib/use-code-editor';
@@ -20,7 +21,8 @@ interface CodeEditorProps {
  */
 export function CodeEditor({ content, format, typography }: CodeEditorProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
-  const editor = useCodeEditor({ parentRef, content, format });
+  const onTop = useAppStore((s) => s.view === 'reader' && !s.openDialog);
+  const editor = useCodeEditor({ parentRef, content, format, onTop });
 
   return (
     <div

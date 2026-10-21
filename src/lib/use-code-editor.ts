@@ -111,9 +111,15 @@ export interface UseCodeEditorOptions {
   /** The document as it was when editing began; read once, as the editor mounts. */
   content: string;
   format: DocFormat;
+  /**
+   * The reader is the thing on screen. The editor takes the focus whenever it
+   * becomes so — as it mounts, and coming back from settings, export or the
+   * home screen, which are laid over it and take the focus while they are up.
+   */
+  onTop: boolean;
 }
 
-export function useCodeEditor({ parentRef, content, format }: UseCodeEditorOptions): {
+export function useCodeEditor({ parentRef, content, format, onTop }: UseCodeEditorOptions): {
   /** Put the cursor at the end of the text: what a click below the last line means. */
   focusEnd: () => void;
 } {
@@ -165,7 +171,6 @@ export function useCodeEditor({ parentRef, content, format }: UseCodeEditorOptio
       },
       meta,
     });
-    view.focus();
 
     return () => {
       detach();
@@ -173,6 +178,11 @@ export function useCodeEditor({ parentRef, content, format }: UseCodeEditorOptio
       viewRef.current = null;
     };
   }, [parentRef]);
+
+  // After the effect above, so that on mount there is a view to focus.
+  useEffect(() => {
+    if (onTop) viewRef.current?.focus();
+  }, [onTop]);
 
   return {
     focusEnd: () => {

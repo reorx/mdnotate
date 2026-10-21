@@ -113,7 +113,10 @@ function App() {
     let cancelled = false;
     getCurrentWindow()
       .onCloseRequested(async (event) => {
-        if (!(await confirmLeaveEdits())) event.preventDefault();
+        if (await confirmLeaveEdits()) return;
+        event.preventDefault();
+        // If this close was one step of ⌘Q, the windows after it stay open too.
+        invoke('cancel_quit').catch(() => {});
       })
       .then((stop) => {
         if (cancelled) stop();
@@ -184,12 +187,14 @@ function App() {
         )}
         <div data-tauri-drag-region className="flex-1" />
         {/* One button for both ways: it stays where it is and changes colour,
-            so the way back is always under the pointer that came in. The View
-            side is the ramp's darkest, which turns light in dark mode. */}
-        {doc && view === 'reader' &&
+            so the way back is always under the pointer that came in — the same
+            width either way, or "View" would grow it leftwards. The View side
+            is the ramp's darkest, which turns light in dark mode. */}
+        {doc &&
+          view === 'reader' &&
           (editing ? (
             <button
-              className="flex items-center gap-1.5 rounded bg-neutral-800 px-2.5 py-1 text-[13px] font-medium text-page hover:bg-neutral-700"
+              className="flex min-w-[4.5rem] items-center justify-center gap-1.5 rounded bg-neutral-800 px-2.5 py-1 text-[13px] font-medium text-page hover:bg-neutral-700"
               title="Back to the rendered document"
               onClick={() => stopEditing().catch((e) => setError(String(e)))}
             >
@@ -198,7 +203,7 @@ function App() {
             </button>
           ) : (
             <button
-              className="flex items-center gap-1.5 rounded bg-sky-600 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-40 dark:disabled:opacity-25"
+              className="flex min-w-[4.5rem] items-center justify-center gap-1.5 rounded bg-sky-600 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-40 dark:disabled:opacity-25"
               disabled={!edit.canEdit}
               title={edit.title}
               onClick={startEditing}
