@@ -63,11 +63,15 @@ const theme = EditorView.theme({
   '.cm-panels': { backgroundColor: 'var(--color-page)', color: 'var(--prose-text)' },
   '.cm-panels-top': { borderBottom: '1px solid var(--color-neutral-200)' },
   '.cm-panel.cm-search': { padding: '6px 4px', fontFamily: 'system-ui, sans-serif', fontSize: '12px' },
+  // The base theme sizes these at 70% of what they sit in — scaled for an
+  // editor-sized font, and down to 8px inside a 12px panel. Same size as the
+  // labels beside them instead.
   '.cm-textfield': {
     backgroundColor: 'var(--color-page)',
     border: '1px solid var(--color-neutral-300)',
     borderRadius: '4px',
     color: 'inherit',
+    fontSize: 'inherit',
   },
   '.cm-button': {
     backgroundImage: 'none',
@@ -75,6 +79,7 @@ const theme = EditorView.theme({
     border: '1px solid var(--color-neutral-200)',
     borderRadius: '4px',
     color: 'inherit',
+    fontSize: 'inherit',
   },
   '.cm-panel.cm-search label': { fontSize: '12px' },
   '.cm-panel.cm-search [name=close]': { color: 'var(--color-neutral-500)' },
