@@ -791,7 +791,10 @@ fn start_window_drag(window: tauri::Window) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{choose_target, modified_millis, spawn_entry, write_conflicts, Incoming, Target, WindowState};
+    use super::{
+        choose_target, modified_millis, spawn_entry, write_conflicts, write_local_file, Incoming, Target, WindowState,
+        WriteOutcome,
+    };
 
     /// A save is refused only when the file carries a modification time and it
     /// is not the one the frontend last saw.
@@ -831,6 +834,55 @@ mod tests {
             modified_millis(std::path::Path::new("/nonexistent/mdnotate/never.md")),
             None
         );
+    }
+
+    /// A file of its own for each test and each run, so tests running in
+    /// parallel never write over one another's.
+    fn scratch_file(name: &str, content: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("mdnotate-write-test-{}-{name}", std::process::id()));
+        std::fs::write(&path, content).expect("could not write the scratch file");
+        path
+    }
+
+    fn write(path: &std::path::Path, content: &str, expected: Option<u64>) -> WriteOutcome {
+        write_local_file(path.to_string_lossy().into_owned(), content.to_string(), expected)
+            .expect("the write itself should not fail")
+    }
+
+    /// The modification time handed back is the one the next save compares
+    /// against, so it has to be the file's own — or the very next ⌘S would
+    /// call its own write a conflict.
+    #[test]
+    fn a_save_writes_the_text_and_answers_with_the_files_new_time() {
+        let path = scratch_file("save.md", "before\n");
+        let opened_at = modified_millis(&path);
+
+        match write(&path, "after\r\n", opened_at) {
+            WriteOutcome::Saved { modified } => assert_eq!(modified, modified_millis(&path)),
+            WriteOutcome::Conflict => panic!("an unchanged file was reported as changed"),
+        }
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "after\r\n");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_file_written_since_it_was_read_is_left_alone() {
+        let path = scratch_file("conflict.md", "theirs\n");
+        let on_disk = modified_millis(&path).expect("a file just written has a modification time");
+
+        assert!(matches!(write(&path, "ours\n", Some(on_disk - 1_000)), WriteOutcome::Conflict));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "theirs\n");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// No expected time is how "Overwrite" is asked for.
+    #[test]
+    fn a_write_without_an_expected_time_goes_ahead_regardless() {
+        let path = scratch_file("overwrite.md", "theirs\n");
+
+        assert!(matches!(write(&path, "ours\n", None), WriteOutcome::Saved { .. }));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "ours\n");
+        let _ = std::fs::remove_file(&path);
     }
 
     fn window(label: &str, doc_id: Option<&str>) -> WindowState {
