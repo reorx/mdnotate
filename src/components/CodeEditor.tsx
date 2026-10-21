@@ -27,9 +27,12 @@ export function CodeEditor({ content, format, typography }: CodeEditorProps) {
       className="min-h-0 flex-1 cursor-text overflow-x-hidden overflow-y-auto"
       style={typographyVars(typography) as CSSProperties}
       // The editor is only as tall as its text. A click in the space below it
-      // still means "write here", which is at the end.
+      // still means "write here", which is at the end. Below it, and nowhere
+      // else: this scroller's own scrollbar reports its clicks here too, and
+      // dragging it must not move the cursor.
       onMouseDown={(e) => {
-        if (parentRef.current?.contains(e.target as Node)) return;
+        const editorBottom = parentRef.current?.firstElementChild?.getBoundingClientRect().bottom;
+        if (editorBottom === undefined || e.clientY <= editorBottom) return;
         e.preventDefault();
         editor.focusEnd();
       }}
