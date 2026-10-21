@@ -181,6 +181,8 @@ tap 写权限使用本仓库的 `TAP_DEPLOY_KEY` secret（仅对 tap 可写的 S
 
 **发版一律走 `.claude/skills/release/`**，push tag 不可逆。版本号用 `scripts/bump-version.sh <版本号>` 改（四处一次改齐），状态用 `scripts/release-status.sh` 核对；不要手工 sed。
 
+完整预检、产物与 Homebrew 验证见 `kb/docs/release.md`；发布或排查发布失败之前先读。非交互 shell 用 `mise exec -- pnpm ...` 确保采用项目固定的 Node 24。
+
 ## 文档
 
 `kb/docs/` —— 各子系统的现状与理由：
@@ -195,6 +197,7 @@ tap 写权限使用本仓库的 `TAP_DEPLOY_KEY` secret（仅对 tap 可写的 S
 - `kb/docs/macos-integration.md` —— 改文件关联、默认 App、窗口拖拽，或要安装构建产物时读
 - `kb/docs/mdnotate-cli.md` —— 改 `mdnotate` 命令、它的打包签名、安装卡片、Agent Skill 时读
 - `kb/docs/verification.md` —— 验收任何改动之前读
+- `kb/docs/release.md` —— 发布前的版本与测试预检、签名产物和 Homebrew 验证、发布失败排查
 
 其它：
 
