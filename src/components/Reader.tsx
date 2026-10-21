@@ -220,11 +220,15 @@ export function Reader() {
 
   // Scroll spy: the active heading is the last one at or above the viewport top.
   // Off in source view, where every heading lookup misses and the first entry
-  // would light up for the whole document.
+  // would light up for the whole document. Off while editing too: a save
+  // rebuilds the headings behind the editor, where the hidden document has no
+  // layout — every heading measures at the top, and the last entry would stay
+  // lit on the way back to View. Leaving edit mode runs it again, on a page
+  // that is there to measure.
   useEffect(() => {
     const scroller = scrollRef.current;
     const container = annotator.containerRef.current;
-    if (!scroller || !container || toc.length === 0 || showingSource) return;
+    if (!scroller || !container || toc.length === 0 || showingSource || editing) return;
 
     const onScroll = () => {
       // At the very bottom the last headings can never reach the viewport
@@ -250,7 +254,7 @@ export function Reader() {
     onScroll();
     scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => scroller.removeEventListener('scroll', onScroll);
-  }, [toc, showingSource, annotator.containerRef]);
+  }, [toc, showingSource, editing, annotator.containerRef]);
 
   const jumpTo = (id: string) => {
     const container = annotator.containerRef.current;
