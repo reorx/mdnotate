@@ -1,6 +1,7 @@
 import { useAppStore } from '../store';
 import type { Annotation } from './annotations';
-import { forgetAnnotation, recordAnnotation } from './annotations-db';
+import { forgetAnnotation, rebaseAnnotations, recordAnnotation } from './annotations-db';
+import { remapToListNumbers, type TextSegment } from './list-numbers';
 
 /**
  * The one way an annotation changes. Like `open-doc`, the store is written
@@ -34,4 +35,30 @@ export function updateComment(id: string, comment: string | null): void {
 export function deleteAnnotation(id: string): void {
   useAppStore.getState().removeAnnotationById(id);
   forgetAnnotation(id).catch((e) => report('delete the annotation', e));
+}
+
+/**
+ * Move annotations made before list numbers became text onto the text the
+ * reader now shows. `segments` are its annotatable text nodes, numbers marked
+ * (see `collectAnnotatableSegments`); the reader calls this once it has
+ * rendered them, with the annotator held off until the hashes agree again.
+ */
+export function moveOntoListNumbers(segments: TextSegment[]): void {
+  const { doc, annotations, rebaseAnnotations: settle, setError } = useAppStore.getState();
+  if (!doc) return;
+  const { kept, lost } = remapToListNumbers(annotations, segments);
+  settle(kept, doc.contentHash);
+  rebaseAnnotations(
+    doc.id,
+    doc.contentHash,
+    kept,
+    lost.map((a) => a.id),
+  ).catch((e) => report('update the annotations', e));
+  // Worded as opening words it: to the user this is the document opening, and
+  // a quote that no longer matches is a document that changed.
+  if (lost.length === 1) {
+    setError('1 annotation discarded: this document has changed since it was made');
+  } else if (lost.length > 1) {
+    setError(`${lost.length} annotations discarded: this document has changed since they were made`);
+  }
 }

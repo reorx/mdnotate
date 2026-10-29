@@ -1,5 +1,6 @@
 import { NOT_ANNOTATABLE_CLASS } from '@recogito/text-annotator';
 import { sortAnnotations, type Annotation } from './annotations';
+import { LIST_NUMBER_CLASS, type TextSegment } from './list-numbers';
 
 /**
  * Moving annotations onto a document the user has just edited and saved.
@@ -57,11 +58,25 @@ function nearestOccurrence(text: string, quote: string, near: number): number | 
  * library applies both when it measures a selection and when it revives one.
  */
 export function collectAnnotatableText(container: HTMLElement): string {
+  return collectAnnotatableSegments(container)
+    .map((segment) => segment.text)
+    .join('');
+}
+
+/**
+ * The same text node by node, with the ordered list numbers marked — what it
+ * takes to tell the text apart from the one before the numbers were written
+ * out (see `remapToListNumbers`).
+ */
+export function collectAnnotatableSegments(container: HTMLElement): TextSegment[] {
   const skip = `.${NOT_ANNOTATABLE_CLASS}`;
+  const number = `.${LIST_NUMBER_CLASS}`;
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, (node) =>
     node.parentElement?.closest(skip) ? NodeFilter.FILTER_SKIP : NodeFilter.FILTER_ACCEPT,
   );
-  let text = '';
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) text += node.textContent ?? '';
-  return text;
+  const segments: TextSegment[] = [];
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    segments.push({ text: node.textContent ?? '', listNumber: !!node.parentElement?.closest(number) });
+  }
+  return segments;
 }

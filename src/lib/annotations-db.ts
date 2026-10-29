@@ -1,5 +1,6 @@
 import { splitStaleAnnotations, type Annotation, type StoredAnnotation } from './annotations';
 import { db } from './db';
+import { preListNumbersHash } from './recent-docs';
 import { isTauri } from './tauri-env';
 
 /**
@@ -37,8 +38,28 @@ function toStored(row: Row): StoredAnnotation {
 
 export interface RestoredAnnotations {
   annotations: Annotation[];
+  /**
+   * The hash their offsets were measured on: `docHash`, unless they were made
+   * before list numbers became text and still have to be moved onto it (see
+   * `moveOntoListNumbers`).
+   */
+  annotationsHash: string;
   /** How many were given up on because the document has changed since. */
   discarded: number;
+}
+
+/**
+ * Put the split into the shape the reader opens with. Annotations to be moved
+ * are only ever returned on their own — `splitStaleAnnotations` sees to that.
+ */
+function restored(
+  docHash: string,
+  { fresh, legacy, stale }: ReturnType<typeof splitStaleAnnotations>,
+): RestoredAnnotations {
+  const legacyHash = preListNumbersHash(docHash);
+  return legacy.length > 0 && legacyHash !== null
+    ? { annotations: legacy, annotationsHash: legacyHash, discarded: stale.length }
+    : { annotations: fresh, annotationsHash: docHash, discarded: stale.length };
 }
 
 /**
@@ -49,11 +70,11 @@ export async function restoreAnnotations(docId: string, docHash: string): Promis
   if (!isTauri) return fallback.restore(docId, docHash);
   const conn = await db();
   const rows = await conn.select<Row[]>(`SELECT ${COLUMNS} FROM annotations WHERE doc_id = $1`, [docId]);
-  const { fresh, stale } = splitStaleAnnotations(rows.map(toStored), docHash);
-  if (stale.length > 0) {
-    await conn.execute('DELETE FROM annotations WHERE doc_id = $1 AND doc_hash <> $2', [docId, docHash]);
+  const split = splitStaleAnnotations(rows.map(toStored), docHash, preListNumbersHash(docHash));
+  for (const row of split.stale) {
+    await conn.execute('DELETE FROM annotations WHERE id = $1', [row.id]);
   }
-  return { annotations: fresh, discarded: stale.length };
+  return restored(docHash, split);
 }
 
 /**
@@ -84,11 +105,14 @@ export async function recordAnnotation(docId: string, docHash: string, annotatio
 }
 
 /**
- * Move a document's annotations onto the text it was just saved as: the ones
- * found again take the new hash and offsets, the ones that were not are gone.
+ * Move a document's annotations onto the text it was just saved as, or now
+ * renders as: the ones found again take the new hash and offsets, the ones
+ * that were not are gone.
  *
  * The exception to "quote and offsets are fixed once committed" — the only
  * time offsets change is when the text under them does, and this is that time.
+ * The quote is written along with them: a highlight across two list items
+ * takes in the number between them once that number is text.
  */
 export async function rebaseAnnotations(
   docId: string,
@@ -100,8 +124,8 @@ export async function rebaseAnnotations(
   const conn = await db();
   for (const annotation of kept) {
     await conn.execute(
-      'UPDATE annotations SET doc_hash = $1, start_offset = $2, end_offset = $3 WHERE id = $4 AND doc_id = $5',
-      [docHash, annotation.start, annotation.end, annotation.id, docId],
+      'UPDATE annotations SET doc_hash = $1, quote = $2, start_offset = $3, end_offset = $4 WHERE id = $5 AND doc_id = $6',
+      [docHash, annotation.quote, annotation.start, annotation.end, annotation.id, docId],
     );
   }
   for (const id of lostIds) {
@@ -149,12 +173,14 @@ const fallback = {
   },
   async restore(docId: string, docHash: string): Promise<RestoredAnnotations> {
     const rows = fallback.read();
-    const { fresh, stale } = splitStaleAnnotations(
+    const split = splitStaleAnnotations(
       rows.filter((r) => r.docId === docId),
       docHash,
+      preListNumbersHash(docHash),
     );
-    if (stale.length > 0) fallback.write(rows.filter((r) => r.docId !== docId || r.docHash === docHash));
-    return { annotations: fresh, discarded: stale.length };
+    const staleIds = new Set(split.stale.map((r) => r.id));
+    if (staleIds.size > 0) fallback.write(rows.filter((r) => !staleIds.has(r.id)));
+    return restored(docHash, split);
   },
   async record(docId: string, docHash: string, annotation: Annotation) {
     const rest = fallback.read().filter((r) => r.id !== annotation.id);
@@ -171,7 +197,9 @@ const fallback = {
         .filter((r) => !lostIds.includes(r.id))
         .map((r) => {
           const annotation = r.docId === docId ? moved.get(r.id) : undefined;
-          return annotation ? { ...r, docHash, start: annotation.start, end: annotation.end } : r;
+          return annotation
+            ? { ...r, docHash, quote: annotation.quote, start: annotation.start, end: annotation.end }
+            : r;
         }),
     );
   },

@@ -272,10 +272,11 @@ export function useTextAnnotator({
     annoRef.current?.setStyle(highlightStyle(theme));
   }, [theme]);
 
-  const commitDraft = (comment: string | null) => {
+  /** Turn the open draft into an annotation; what was made, or null for nothing. */
+  const commitDraft = (comment: string | null): Annotation | null => {
     const anno = annoRef.current;
     const current = popupRef.current;
-    if (!anno || current?.kind !== 'draft') return;
+    if (!anno || current?.kind !== 'draft') return null;
     // Re-read the draft: the user may have adjusted the selection after the
     // popup opened.
     const draft = anno.getAnnotationById(current.draftId);
@@ -284,12 +285,13 @@ export function useTextAnnotator({
     if (!created) {
       if (draft) anno.removeAnnotation(draft.id);
       anno.cancelSelected();
-      return;
+      return null;
     }
     const annotation: Annotation = { ...created, comment };
     if (comment !== null) anno.updateAnnotation(toRecogitoAnnotation(annotation));
     onCreate(annotation);
     anno.cancelSelected();
+    return annotation;
   };
 
   /** Open an existing annotation's popup, as clicking its highlight would. */
@@ -297,20 +299,23 @@ export function useTextAnnotator({
     annoRef.current?.setSelected(id);
   };
 
+  // These two are also reached from the annotation list, which can outlive the
+  // annotator (source view, edit mode). The store is what the annotator seeds
+  // itself from when it comes back, so the change goes there either way.
   const deleteAnnotation = (id: string) => {
     const anno = annoRef.current;
-    if (!anno) return;
-    setPopupState(null);
-    anno.removeAnnotation(id);
-    anno.cancelSelected();
+    if (anno) {
+      setPopupState(null);
+      anno.removeAnnotation(id);
+      anno.cancelSelected();
+    }
     onRemove(id);
   };
 
   const saveComment = (id: string, comment: string | null) => {
     const anno = annoRef.current;
-    if (!anno) return;
     const stored = annotationsRef.current.find((a) => a.id === id);
-    if (stored) anno.updateAnnotation(toRecogitoAnnotation({ ...stored, comment }));
+    if (anno && stored) anno.updateAnnotation(toRecogitoAnnotation({ ...stored, comment }));
     onSetComment(id, comment);
   };
 

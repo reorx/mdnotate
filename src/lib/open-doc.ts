@@ -81,7 +81,7 @@ async function open(doc: NewDoc, attempt: number): Promise<void> {
   let note: string | null = null;
   const restored = await restoreAnnotations(doc.id, contentHash).catch((e) => {
     note = `Opened, but could not restore annotations: ${e}`;
-    return { annotations: [], discarded: 0 };
+    return { annotations: [], annotationsHash: contentHash, discarded: 0 };
   });
   if (restored.discarded === 1) {
     note = '1 annotation discarded: this document has changed since it was made';
@@ -90,7 +90,7 @@ async function open(doc: NewDoc, attempt: number): Promise<void> {
   }
 
   if (!opens.isCurrent(attempt)) return;
-  openDoc({ ...doc, contentHash }, restored.annotations);
+  openDoc({ ...doc, contentHash }, restored.annotations, restored.annotationsHash);
   announceDoc();
   if (note) setError(note);
 

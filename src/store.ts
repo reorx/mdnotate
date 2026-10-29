@@ -23,7 +23,9 @@ interface AppState {
    * `doc.contentHash` except in the moment after a save, when the text has
    * changed and the annotations have yet to be moved onto it — the reader keeps
    * the annotator off until the two agree again, or it would paint old offsets
-   * over new prose.
+   * over new prose. Opening a document annotated before list numbers became
+   * text is the same moment: the text is new to its annotations, if not to
+   * the file.
    */
   annotationsHash: string | null;
   /** The document is shown in the code editor rather than rendered. */
@@ -43,7 +45,8 @@ interface AppState {
   error: string | null;
   /** What is being fetched right now, shown in the toolbar; null when nothing is. */
   opening: string | null;
-  openDoc: (doc: OpenDoc, annotations?: Annotation[]) => void;
+  /** `annotationsHash` defaults to the document's own: see the field for when it is not. */
+  openDoc: (doc: OpenDoc, annotations?: Annotation[], annotationsHash?: string) => void;
   setEditing: (editing: boolean) => void;
   setDirty: (dirty: boolean) => void;
   /** The text just written to disk becomes the document's text. */
@@ -56,6 +59,7 @@ interface AppState {
   setOpenDialog: (open: boolean) => void;
   toggleSidebar: () => void;
   toggleAnnotations: () => void;
+  showAnnotations: () => void;
   addAnnotation: (annotation: Annotation) => void;
   removeAnnotationById: (id: string) => void;
   setComment: (id: string, comment: string | null) => void;
@@ -100,11 +104,11 @@ export const useAppStore = create<AppState>((set) => ({
   // So is going back to reading: a document always opens rendered, and any
   // edits to the one before it were saved or let go before it got this far
   // (see `edit-session`).
-  openDoc: (doc, annotations = []) =>
+  openDoc: (doc, annotations = [], annotationsHash = doc.contentHash) =>
     set({
       doc,
       annotations,
-      annotationsHash: doc.contentHash,
+      annotationsHash,
       editing: false,
       dirty: false,
       view: 'reader',
@@ -125,6 +129,7 @@ export const useAppStore = create<AppState>((set) => ({
   setOpenDialog: (openDialog) => set({ openDialog }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   toggleAnnotations: () => set((s) => ({ annotationsOpen: !s.annotationsOpen })),
+  showAnnotations: () => set({ annotationsOpen: true }),
   // Making an annotation is what reveals the list: an empty panel is worth no
   // screen width, and the first highlight is the moment it becomes worth some.
   addAnnotation: (annotation) =>

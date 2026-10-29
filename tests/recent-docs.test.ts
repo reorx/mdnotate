@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  annotationContentHash,
   clipboardDocId,
   countChars,
   deriveClipboardTitle,
@@ -12,6 +13,7 @@ import {
   hashText,
   makeSnippet,
   MAX_CLIPBOARD_CHARS,
+  preListNumbersHash,
   MIN_CLIPBOARD_CHARS,
   RECENTS_LIMIT,
   upsertRecent,
@@ -105,6 +107,33 @@ describe('hashText', () => {
 
 // Recent entries dedup on their id, so the id itself carries the dedup rule:
 // files collapse by path, clipboard entries collapse by content.
+describe('annotationContentHash', () => {
+  it('hashes plain text as it is', () => {
+    expect(annotationContentHash('1. one', 'text')).toBe(hashText('1. one'));
+  });
+
+  it('marks Markdown as rendered with its list numbers written out', () => {
+    expect(annotationContentHash('# a', 'markdown')).toBe(`${hashText('# a')}:list-numbers-v1`);
+  });
+
+  it('keeps the front matter mark ahead of the list numbers one', () => {
+    const content = '---\ntitle: a\n---\n\nbody';
+    expect(annotationContentHash(content, 'markdown')).toBe(`${hashText(content)}:front-matter-v1:list-numbers-v1`);
+  });
+});
+
+describe('preListNumbersHash', () => {
+  it('is the hash the same Markdown had before list numbers were text', () => {
+    expect(preListNumbersHash(annotationContentHash('# a', 'markdown'))).toBe(hashText('# a'));
+    const content = '---\ntitle: a\n---\n\nbody';
+    expect(preListNumbersHash(annotationContentHash(content, 'markdown'))).toBe(`${hashText(content)}:front-matter-v1`);
+  });
+
+  it('is nothing for text, which never had numbers to gain', () => {
+    expect(preListNumbersHash(annotationContentHash('1. one', 'text'))).toBeNull();
+  });
+});
+
 describe('document ids', () => {
   it('identifies a file by its path', () => {
     expect(fileDocId('/tmp/a.md')).toBe(fileDocId('/tmp/a.md'));

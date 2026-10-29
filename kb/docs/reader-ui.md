@@ -1,6 +1,6 @@
 ---
 created: 2026-09-28
-updated: 2026-10-21
+updated: 2026-10-29
 tags:
   - reader
   - layout
@@ -47,6 +47,17 @@ Markdown 文件开头用 `---` 包裹的 YAML 在正文顶部按字段列表显�
 字段列表使用正文的字号和深浅主题，窄正文列自动改为上下排列。字段和值可以搜索、划词和标注，只有「Front matter」界面标签带 `not-annotatable`；元数据不进入目录。
 
 这次布局改变了渲染文本偏移，所以仅含已闭合 Front Matter 的 Markdown 使用 `:front-matter-v1` 哈希后缀。升级前的标注经现有失效机制删除并提示，避免高亮错位；普通 Markdown、纯文本、docId 不受影响。以后再改变元数据文本布局时也须升级这个版本。
+
+## 有序列表的编号是文字
+
+浏览器自己的列表标记是画出来的，不在 DOM 里：选不中、复制不到、⌘F 搜不到，标注也引用不到 —— 一条跨两项的高亮只有内容、没有区分它们的编号。编号常常就是信息本身（「第 3 步」「第二种方案」），所以由 rehype 插件 `rehypeListNumbers` 把每项的编号写成正文里的一个 `<span class="list-number">N. </span>`，`ol` 去掉原生标记。
+
+- 编号按位置数，从列表的 `start` 起；嵌套列表各数各的；无序列表不动。
+- 松散列表的项内容在 `<p>` 里，编号放进第一个段落，否则编号自己占一行。
+- 样式上是一个比缩进宽、再用负 margin 拉回同样距离的 inline-block，右对齐（9. 和 10. 的点对齐），所以正文起点和换行缩进都和原来一样。不用绝对定位：内联的编号留在第一行里，复制时也跟着那一行。
+- 编号末尾的空格是文字的一部分，引用和复制读作「1. First」。它必须是 `white-space: pre`：可折叠的空格在 inline-block 行尾会被丢掉，复制出来就是「1.First」，而间距本来就该由这个空格来出，和原生标记一样。
+
+编号成了文字，就进了标注偏移所数的文本：所有 Markdown 的内容哈希都带上 `:list-numbers-v1`。之前做的标注不丢弃，而是打开时精确挪过去，见 `annotations-and-export.md`。
 
 ## 源码视图
 
@@ -154,6 +165,7 @@ Edit 按钮把正文换成代码编辑器，行为与规则在 `editing.md`。�
 - `src/App.tsx` —— 视图覆盖层与 `inert`
 - `src/components/Reader.tsx` —— 三栏、源码视图、搜索与全选的启用条件
 - `src/lib/front-matter.ts`、`src/components/FrontMatter.tsx` —— YAML 文件头的识别、解析与展示
+- `src/lib/list-numbers.ts`、`App.css` 的 `.list-number` —— 有序列表编号写成文字（`tests/list-numbers.test.tsx`）
 - `src/lib/panels.ts` —— 侧栏宽度的默认值与范围
 - `src/lib/search.ts`（纯规则）、`src/lib/use-doc-search.ts`（DOM 那半）、`src/lib/find-painter.ts`、`src/find-highlight.css`
 - `src/lib/use-select-all.ts`

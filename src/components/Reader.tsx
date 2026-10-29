@@ -2,19 +2,21 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAppStore } from '../store';
-import { createAnnotation, deleteAnnotation, updateComment } from '../lib/annotate';
+import { createAnnotation, deleteAnnotation, moveOntoListNumbers, updateComment } from '../lib/annotate';
 import { convertBoxTables } from '../lib/box-table';
 import { rebaseAfterSave, useSaveShortcut } from '../lib/edit-session';
 import { splitFrontMatter } from '../lib/front-matter';
+import { rehypeListNumbers } from '../lib/list-numbers';
 import { DEFAULT_PANEL_WIDTHS, panelWidthFromPointer, type PanelSide } from '../lib/panels';
-import { collectAnnotatableText } from '../lib/reanchor';
+import { collectAnnotatableSegments, collectAnnotatableText } from '../lib/reanchor';
+import { preListNumbersHash } from '../lib/recent-docs';
 import { saveSettings } from '../lib/settings';
 import { buildToc, type TocItem } from '../lib/toc';
 import { typographyVars } from '../lib/typography';
 import { useDocSearch } from '../lib/use-doc-search';
 import { useSelectAll } from '../lib/use-select-all';
 import { useTextAnnotator } from '../lib/use-text-annotator';
-import { AnnotationList } from './AnnotationList';
+import { AnnotationList, type ListEditor } from './AnnotationList';
 import { AnnotationPopup } from './AnnotationPopup';
 import { CodeEditor } from './CodeEditor';
 import { CommentMarkers } from './CommentMarkers';
@@ -117,6 +119,10 @@ export function Reader() {
   const [toc, setToc] = useState<TocItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [pickedAnnotationId, setPickedAnnotationId] = useState<string | null>(null);
+  // At most one comment is written in the list at a time; it belongs to this
+  // document and goes with it. `initial` is what its box opens on.
+  const [listEditor, setListEditor] = useState<ListEditor | null>(null);
+  useEffect(() => setListEditor(null), [docId]);
   // Reading the Markdown behind the page is a look, not a mode to live in: it
   // belongs to this document, in this window, and the next document opens
   // rendered as always.
@@ -184,10 +190,18 @@ export function Reader() {
   // the time this runs it shows the new text; collect it in the annotator's
   // terms and move the annotations onto it. Until that settles the hashes
   // again, the annotator above stays off.
+  //
+  // A document opened with annotations from before list numbers were text
+  // comes through here too: same text, but the numbers are new to its
+  // annotations, and they are moved past them exactly rather than searched for.
   useEffect(() => {
     const container = annotator.containerRef.current;
     if (!container || content === null || annotationsHash === contentHash || showingSource) return;
-    rebaseAfterSave(collectAnnotatableText(container));
+    if (contentHash !== null && annotationsHash === preListNumbersHash(contentHash)) {
+      moveOntoListNumbers(collectAnnotatableSegments(container));
+    } else {
+      rebaseAfterSave(collectAnnotatableText(container));
+    }
   }, [content, contentHash, annotationsHash, showingSource, annotator.containerRef]);
 
   // Collect headings from the rendered DOM: assign slug ids and build the TOC.
@@ -270,6 +284,29 @@ export function Reader() {
 
   const popup = annotator.popup;
   const popupAnnotation = popup?.kind === 'view' ? annotations.find((a) => a.id === popup.annotationId) : undefined;
+
+  // The popup's → button. A draft becomes an annotation first — with what was
+  // typed, or as a plain highlight — so there is an entry to write in; an
+  // existing one keeps whatever was changed. Either way nothing typed so far is
+  // lost, and the list's box opens on it as typed: whoever stopped mid-sentence
+  // to move carries on from the space they had just typed.
+  const moveCommentToList = (text: string) => {
+    if (!popup) return;
+    const comment = text.trim() || null;
+    let id: string;
+    if (popup.kind === 'draft') {
+      const created = annotator.commitDraft(comment);
+      if (!created) return;
+      id = created.id;
+    } else {
+      id = popup.annotationId;
+      if (comment !== (popupAnnotation?.comment ?? null)) annotator.saveComment(id, comment);
+      annotator.dismissPopup();
+    }
+    useAppStore.getState().showAnnotations();
+    setPickedAnnotationId(id);
+    setListEditor({ id, initial: text });
+  };
   // An open popup wins: clicking a highlight in the text should move the
   // marker in the list, not leave it on whatever was picked there before.
   const activeAnnotationId = popup?.kind === 'view' ? popup.annotationId : pickedAnnotationId;
@@ -323,6 +360,7 @@ export function Reader() {
                     scrolls inside its own box, like `pre` always has. */}
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeListNumbers]}
                   components={{
                     table: ({ node: _node, ...props }) => (
                       <div className="overflow-x-auto">
@@ -349,6 +387,7 @@ export function Reader() {
                 onAnnotate={(comment) => annotator.commitDraft(comment)}
                 onDelete={annotator.deleteAnnotation}
                 onSaveComment={annotator.saveComment}
+                onMoveToPanel={moveCommentToList}
                 onDismiss={annotator.dismissPopup}
               />
             )}
@@ -384,7 +423,20 @@ export function Reader() {
           <PanelResizeHandle side="annotations" containerRef={rootRef} />
           <aside className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50" style={{ width: panels.annotations }}>
             <PanelContent inert={showingSource || editing}>
-              <AnnotationList annotations={annotations} activeId={activeAnnotationId} onJump={jumpToAnnotation} />
+              <AnnotationList
+                annotations={annotations}
+                activeId={activeAnnotationId}
+                editing={listEditor}
+                onJump={jumpToAnnotation}
+                // Writing about a passage starts with it in view.
+                onEdit={(id) => {
+                  jumpToAnnotation(id);
+                  setListEditor({ id, initial: annotations.find((a) => a.id === id)?.comment ?? '' });
+                }}
+                onEditDone={() => setListEditor(null)}
+                onSaveComment={annotator.saveComment}
+                onDelete={annotator.deleteAnnotation}
+              />
             </PanelContent>
           </aside>
         </>

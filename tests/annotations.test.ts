@@ -102,7 +102,33 @@ describe('splitStaleAnnotations', () => {
   });
 
   it('returns nothing for a document that has never been annotated', () => {
-    expect(splitStaleAnnotations([], 'h1')).toEqual({ fresh: [], stale: [] });
+    expect(splitStaleAnnotations([], 'h1')).toEqual({ fresh: [], legacy: [], stale: [] });
+  });
+
+  describe('with the hash the text had under an earlier rendering', () => {
+    it('sets aside annotations made on that rendering, to be moved rather than dropped', () => {
+      const rows = [stored({ id: 'b', start: 50, docHash: 'h1' }), stored({ id: 'a', start: 10, docHash: 'h1' })];
+      const { fresh, legacy, stale } = splitStaleAnnotations(rows, 'h1:r2', 'h1');
+      expect(fresh).toEqual([]);
+      expect(legacy.map((a) => a.id)).toEqual(['a', 'b']);
+      expect(legacy[0]).not.toHaveProperty('docHash');
+      expect(stale).toEqual([]);
+    });
+
+    it('still drops annotations made on different text', () => {
+      const rows = [stored({ id: 'a', start: 10, docHash: 'h1' }), stored({ id: 'x', start: 10, docHash: 'h0' })];
+      const { legacy, stale } = splitStaleAnnotations(rows, 'h1:r2', 'h1');
+      expect(legacy.map((a) => a.id)).toEqual(['a']);
+      expect(stale.map((a) => a.id)).toEqual(['x']);
+    });
+
+    it('drops them when some were already moved: the two sets count in different text', () => {
+      const rows = [stored({ id: 'a', start: 10, docHash: 'h1' }), stored({ id: 'b', start: 50, docHash: 'h1:r2' })];
+      const { fresh, legacy, stale } = splitStaleAnnotations(rows, 'h1:r2', 'h1');
+      expect(fresh.map((a) => a.id)).toEqual(['b']);
+      expect(legacy).toEqual([]);
+      expect(stale.map((a) => a.id)).toEqual(['a']);
+    });
   });
 });
 

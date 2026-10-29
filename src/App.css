@@ -206,8 +206,26 @@ html ::selection {
 .prose-dense ul {
   list-style: disc;
 }
+/* The numbers are text the reader wrote into each item (lib/list-numbers.ts),
+   so they can be selected and quoted; the browser's own marker would only
+   draw them a second time. Each one hangs left of its item the way the marker
+   did: a box as wide as the indent and then some, pulled back by exactly that
+   much so the item's text starts where it always has, right-aligned so 9. and
+   10. line up on the dot. Inline rather than positioned, so the number stays
+   on the item's first line and copies as part of it.
+   `pre` keeps the number's trailing space, which is the gap before the text
+   just as it is in a native marker. Collapsible, it would be dropped at the
+   end of the box, and a copy would read "1.First". */
 .prose-dense ol {
-  list-style: decimal;
+  list-style: none;
+}
+.prose-dense .list-number {
+  display: inline-block;
+  width: 2.5em;
+  margin-left: -2.5em;
+  text-align: right;
+  white-space: pre;
+  font-variant-numeric: tabular-nums;
 }
 .prose-dense li {
   margin: 0.15em 0;

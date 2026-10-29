@@ -77,22 +77,29 @@ export function sortAnnotations(annotations: Annotation[]): Annotation[] {
  * different content would point at whatever words now happen to sit at those
  * positions. Rather than highlight the wrong sentence, annotations whose hash
  * does not match are given up on.
+ *
+ * The exception is `legacyHash`: the same text under an earlier rendering, one
+ * the reader can map onto the current rendering exactly (see `list-numbers`).
+ * Those annotations are set aside to be moved. But only when none have moved
+ * yet: a move the database only half-recorded leaves some at each hash, and
+ * the two sets cannot be held together, each counting in a different text.
  */
 export function splitStaleAnnotations(
   rows: StoredAnnotation[],
   docHash: string,
-): { fresh: Annotation[]; stale: StoredAnnotation[] } {
+  legacyHash: string | null = null,
+): { fresh: Annotation[]; legacy: Annotation[]; stale: StoredAnnotation[] } {
   const fresh: Annotation[] = [];
+  const legacy: Annotation[] = [];
   const stale: StoredAnnotation[] = [];
+  const movable = rows.every((row) => row.docHash !== docHash);
   for (const row of rows) {
-    if (row.docHash === docHash) {
-      const { docHash: _hash, ...annotation } = row;
-      fresh.push(annotation);
-    } else {
-      stale.push(row);
-    }
+    const { docHash: hash, ...annotation } = row;
+    if (hash === docHash) fresh.push(annotation);
+    else if (movable && legacyHash !== null && hash === legacyHash) legacy.push(annotation);
+    else stale.push(row);
   }
-  return { fresh: sortAnnotations(fresh), stale };
+  return { fresh: sortAnnotations(fresh), legacy: sortAnnotations(legacy), stale };
 }
 
 export function upsertAnnotation(annotations: Annotation[], annotation: Annotation): Annotation[] {

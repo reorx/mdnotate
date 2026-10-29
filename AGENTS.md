@@ -23,14 +23,16 @@ src/lib/          纯逻辑 + hook，按主题：
   阅读器       search + use-doc-search + find-painter（⌘F）、use-select-all（⌘A）、
                keys（按键谓词）、toc、doc-info、panels、window-drag、
                box-table（CLI 框线表格 → GFM 表格，只喂渲染器、不动 store）、
-               front-matter（文件头 YAML 的拆分与字段展示）
+               front-matter（文件头 YAML 的拆分与字段展示）、
+               list-numbers（有序列表编号写成文字 + 旧标注的挪动）
   存储与设置   db（唯一连接）、recents-db / annotations-db / path-prefixes-db、
                settings、theme、typography
   其它         default-app、cli-install、tauri-env、sample-doc
 src/components/   Home 与它的卡片（OpenFileCard / ClipboardCard / DefaultAppCard / CliInstallCard，
                   共用 ActionCard 的壳）、PathEntry + PrefixCombobox（首页与 ⌘O 面板共用）、
                   OpenDialog、RecentList、Reader（正文 + 两侧栏）、Toc、AnnotationList、
-                  AnnotationPopup、CommentMarkers、CodeEditor、FindBar、StatusBar、DocTitle、
+                  AnnotationPopup、CommentEditor（弹窗与侧栏共用的评论框）、IconButton、
+                  CommentMarkers、CodeEditor、FindBar、StatusBar、DocTitle、
                   ExportView、SettingsView、FrontMatter（正文顶部的元数据字段列表）
 src/store.ts      zustand 全局状态，每个窗口一份
 src/App.css       样式与深色调色板；find-highlight.css 单独装 ::highlight() 规则
@@ -102,9 +104,11 @@ pnpm build:signed  # 构建 + 签名 + 公证，产物可安装进 /Applications
 - **改标注只走 `annotate.ts`**；标注必须和文档**一起**进 store（`openDoc(doc, annotations)`），晚到的不会被渲染。
 - **标注层的 `documentKey` 是 `docId#contentHash`**，只写 docId 会在文档重开后按旧偏移高亮到错的句子。
 - 内容哈希对不上的标注在打开时直接丢弃，这是有意的。
-- 含 Front Matter 的 Markdown 的 `contentHash` 带渲染版本后缀（`annotationContentHash`），避免恢复旧布局的偏移；改元数据的文本布局时要升级后缀。docId 仍只由原文 / 路径决定。
+- Markdown 的 `contentHash` 带渲染版本后缀（`annotationContentHash`）：Front Matter 文档有 `:front-matter-v1`，所有 Markdown 有 `:list-numbers-v1`。**任何改变渲染文本（含插入文字节点）的改动都要升级或新增后缀**，否则旧偏移会静默高亮到错的句子。docId 仍只由原文 / 路径决定。
+- 有序列表编号是正文里的真实文字（`list-numbers.ts` 的 rehype 插件），参与偏移、搜索和复制；编号成为文字之前的标注在打开时精确挪过去，不丢弃。
 - recogito 必须用 `SPANS` renderer；我们放进标注容器的层都要带 `not-annotatable`；换主题用 `setStyle()`，不要重建标注层。
-- 纯图标按钮用 `IconButton`，不手写裸 `<button>`。
+- 纯图标按钮用 `components/IconButton.tsx`，不手写裸 `<button>`。
+- 评论输入框只有 `CommentEditor` 一个，弹窗与侧栏共用。侧栏里的输入框**点外部不关**（边看正文边写是它存在的理由），弹窗点外部则丢弃。
 
 细节在 `kb/docs/annotations-and-export.md`：失效判定、弹窗与落点、评论图标层、侧栏、两层导出模板的按行规则。改 `use-text-annotator.ts`、`template.ts` 或标注相关组件之前先读。
 

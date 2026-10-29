@@ -103,14 +103,38 @@ export function hashText(text: string): string {
 }
 
 /**
+ * Ordered list numbers became text in the rendered document (see
+ * `list-numbers`), which moved every offset after the first numbered item.
+ * Every Markdown hash carries it, not just the ones with a list: finding out
+ * would mean parsing the document before it is rendered, and moving the
+ * annotations of a document without one changes nothing.
+ */
+const LIST_NUMBERS_REVISION = ':list-numbers-v1';
+
+/**
+ * The hash annotation offsets are tied to: the source text, plus a revision
+ * for each change to the text the reader renders it as.
+ *
  * Front matter used to render as ordinary Markdown. Its field list changes
  * text offsets even when source bytes do not change, so old anchors must use
- * the same discard path as an edited document. Keep every other hash (and all
- * document ids) unchanged. Future metadata text changes must bump this suffix.
+ * the same discard path as an edited document. Future metadata text changes
+ * must bump that suffix. List numbers changed the text in a way that can be
+ * undone exactly, so annotations from before them are moved instead (see
+ * `preListNumbersHash`). Plain text and all document ids stay unchanged.
  */
 export function annotationContentHash(content: string, format: DocFormat): string {
-  const revision = format === 'markdown' && splitFrontMatter(content) ? ':front-matter-v1' : '';
-  return hashText(content) + revision;
+  if (format !== 'markdown') return hashText(content);
+  const frontMatter = splitFrontMatter(content) ? ':front-matter-v1' : '';
+  return hashText(content) + frontMatter + LIST_NUMBERS_REVISION;
+}
+
+/**
+ * The hash the same text had before list numbers were written out; null for a
+ * document that never had numbers to gain. Annotations stored under it are
+ * moved onto the numbered text when the document is next opened.
+ */
+export function preListNumbersHash(hash: string): string | null {
+  return hash.endsWith(LIST_NUMBERS_REVISION) ? hash.slice(0, -LIST_NUMBERS_REVISION.length) : null;
 }
 
 export function fileDocId(path: string): string {

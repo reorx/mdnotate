@@ -1,6 +1,6 @@
 ---
 created: 2026-09-28
-updated: 2026-10-21
+updated: 2026-10-29
 tags:
   - annotations
   - recogito
@@ -22,7 +22,10 @@ highlight 与 comment 是同一结构，`comment === null` 即纯高亮。界面
 
 每条标注存一份创建时的文档内容哈希。打开文档时哈希不匹配的标注直接删除，并提示丢弃了几条。
 
-`annotationContentHash` 对含已闭合 Front Matter 的 Markdown 额外附上 `:front-matter-v1` 渲染版本。即使原文没变，元数据从普通 Markdown 改成字段列表也会改变锚点偏移，因此旧布局的标注同样需要失效。普通 Markdown / 纯文本仍沿用原始内容哈希，docId 计算不变。
+`annotationContentHash` 是「原文哈希 + 渲染版本」：原文没变、渲染出的文本变了，偏移一样会错位。纯文本只有原文哈希，docId 计算不变。Markdown 目前有两个版本后缀：
+
+- `:front-matter-v1`，只加在含已闭合 Front Matter 的文档上：元数据从普通 Markdown 改成字段列表，旧布局的标注走失效机制删除。
+- `:list-numbers-v1`，加在所有 Markdown 上：有序列表编号成了文字（见 `reader-ui.md`）。要知道一篇文档有没有有序列表得先解析它，而对没有列表的文档，下面的挪动什么也不改，所以不区分。旧标注不丢弃，见下文「编号成为文字之前的标注」。
 
 原因：偏移是对渲染文本数出来的，文件在外部被改过就会全部错位；而标注库按偏移恢复高亮时**不校验 quote**，会静默高亮到错的句子。宁可丢弃也不高亮错。
 
@@ -32,10 +35,20 @@ highlight 与 comment 是同一结构，`comment === null` 即纯高亮。界面
 
 另一条丢失路径是 Recent 的 50 条上限：标注行挂在 Recent 条目上并随它级联删除，文档被挤出 Recent 时标注一起销毁。这是明确选择的行为。
 
+### 编号成为文字之前的标注：挪，不丢
+
+这一次的渲染变化可以精确撤销：旧文本就是新文本去掉编号节点。所以哈希等于 `preListNumbersHash(当前哈希)` 的标注不丢弃，而是：
+
+1. 打开时 `splitStaleAnnotations` 把它们单独分出来（`legacy`），连同旧哈希一起进 store，`annotationsHash` 停在旧哈希上，标注层不启用。
+2. 正文渲染后，Reader 收集带编号标记的文本节点（`collectAnnotatableSegments`），`moveOntoListNumbers` 把每个旧偏移映射到新偏移：恰好从某项开头起的标注不吞进该项编号，跨项的标注吞进中间的编号，quote 按新文本重读。
+3. 先写 store 再写库（hash、quote、偏移一起改），标注层随之启用。
+
+旧偏移处的文字和 quote 对不上的标注照常丢弃并提示 —— 那说明它不是在这份文本上做的。若库里同时有新旧两种哈希（上一次挪动只写了一半），旧的那批直接丢弃：两批偏移数的是不同的文本，放不进同一个 store。
+
 ## 读写规则
 
 - **改标注只走 `annotate` 这一个漏斗**：先写 store 后写库，写库失败只出提示。
-- 写入是 upsert，只更新 comment 和更新时间。quote 与偏移在提交那一刻就固定了。
+- 写入是 upsert，只更新 comment 和更新时间。quote 与偏移在提交那一刻就固定了；唯一的例外是它们下面的文本变了的时候（保存编辑、编号成为文字），由 `rebaseAnnotations` 一起改写。
 - **标注必须与文档同时进 store。** 标注层只在创建时读一次标注，异步晚到的不会被渲染，所以文档和它的标注是一次性写入的。
 - **标注层的 key 是 `docId#contentHash`，不能只写 docId。** 同一个文档被重开是常态（刷新按钮、双击已开着的文档、Recent 里点回来），此时 docId 不变、正文却可能已被换掉。只按 docId 建 key，标注层会留在原地，继续按旧偏移在新正文上画高亮。内容没变时哈希不变、标注层不重建，草稿、选区、滚动位置全部原地保留 —— 这是刷新一个没被改过的文件时的正常结果。
 
@@ -55,7 +68,15 @@ highlight 与 comment 是同一结构，`comment === null` 即纯高亮。界面
 
 - Enter 保存，Shift+Enter 换行，Esc 与点外部一律**丢弃**改动。
 - 保存空串 = 退回纯高亮。
-- 底部左边删除、右边取消 / 确认，三个都是纯图标，所以 `title` 和 `aria-label` 两个都得给。`IconButton` 把这件事包死，不要手写裸 `<button>`。
+- 底部左边删除、右边 → / 取消 / 确认，都是纯图标，所以 `title` 和 `aria-label` 两个都得给。`IconButton` 把这件事包死，不要手写裸 `<button>`。
+- 输入框本身是 `CommentEditor`，弹窗和侧栏共用：按键、按钮、含义两边完全一致。
+
+### → 按钮：挪到侧栏去写
+
+弹窗挂在选区下方，会盖住紧接着的正文，没法边看边写。→ 把正在写的东西交给侧栏：
+
+- 新选区先提交成标注：框里有字就带着评论，空的就是纯高亮。已有的标注，内容变了就先存。
+- 然后关弹窗、打开侧栏、该条目设为 active，条目里的输入框打开并聚焦。框里是**原样**的文字（不 trim），写到一半带着末尾空格挪过去也能接着打。
 - Enter / Esc 的判定要避开输入法组字，见 `reader-ui.md` 的「键盘与输入法」。
 
 ### 落点
@@ -87,6 +108,14 @@ highlight 与 comment 是同一结构，`comment === null` 即纯高亮。界面
 - 条目的引用文字是素的，不带正文里那层琥珀底。一整列全是引用，刷成一片琥珀之后这个底色就不再意味着「这是高亮」。active 由边框、浅底和序号颜色表示。
 - 有评论的条目，图标放在评论行首，不放引用行末尾：引用最多显示三行，被截断时行尾的东西会跟着被裁掉。
 
+### 在侧栏里写评论
+
+- 条目右上角的铅笔（无评论时是加号）在 hover、active、键盘聚焦时出现，点它先跳到正文对应位置，再在条目里打开输入框。
+- 条目是两个并排的控件：跳转是一个 `<button>`，输入框在它外面 —— button 里放不了 textarea。边框和底色挂在外层。
+- 同一时间只有一个条目在编辑，状态在 Reader（`listEditor`），换文档时清掉。
+- 和弹窗不同，**点外部不关**：在侧栏写的意义就是边看正文边写，点正文、选字复制都不该丢掉草稿。只有 Enter / ✓ 保存、Esc / × 放弃会关。
+- 保存和删除不依赖标注层还活着：源码视图、编辑模式下标注层已销毁，改动直接进 store，标注层重建时从 store 取。（这两种模式下侧栏是 `inert`，实际点不到，但不靠这一点。）
+
 ## 导出
 
 导出是两层模板：
@@ -110,4 +139,5 @@ highlight 与 comment 是同一结构，`comment === null` 即纯高亮。界面
 - `src/lib/use-text-annotator.ts` —— 标注库的封装：draft 生命周期、弹窗锚点、图标同步
 - `src/lib/popup-position.ts`、`src/lib/annotation-markers.ts` —— 落点几何，纯规则
 - `src/lib/template.ts` —— 两层模板（`tests/template.test.ts`）
-- `src/components/AnnotationPopup.tsx`、`CommentMarkers.tsx`、`AnnotationList.tsx`、`ExportView.tsx`
+- `src/lib/list-numbers.ts` 的 `remapToListNumbers`、`annotate.ts` 的 `moveOntoListNumbers`、`recent-docs.ts` 的 `preListNumbersHash` —— 编号成为文字前的标注的挪动（`tests/list-numbers.test.tsx`、`tests/list-numbers-migration.test.ts`）
+- `src/components/AnnotationPopup.tsx`、`CommentEditor.tsx`、`CommentMarkers.tsx`、`AnnotationList.tsx`、`ExportView.tsx`、`IconButton.tsx`

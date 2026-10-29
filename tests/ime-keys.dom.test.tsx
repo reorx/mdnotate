@@ -54,6 +54,7 @@ function renderPopup(popup: AnnotationPopupState, annotation?: Annotation) {
     onAnnotate: vi.fn(),
     onDelete: vi.fn(),
     onSaveComment: vi.fn(),
+    onMoveToPanel: vi.fn(),
     onDismiss: vi.fn(),
   };
   render(<AnnotationPopup popup={popup} annotation={annotation} {...handlers} />);

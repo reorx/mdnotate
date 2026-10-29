@@ -1,9 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, Highlighter, MessageSquarePlus, Trash2, X } from 'lucide-react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Highlighter, MessageSquarePlus } from 'lucide-react';
 import type { Annotation } from '../lib/annotations';
-import { isCancelEscape, isSubmitEnter } from '../lib/keys';
 import { placePopup, type PopupSize } from '../lib/popup-position';
 import { NOT_ANNOTATABLE_CLASS, type AnnotationPopupState } from '../lib/use-text-annotator';
+import { CommentEditor } from './CommentEditor';
 
 interface AnnotationPopupProps {
   popup: AnnotationPopupState;
@@ -12,6 +12,13 @@ interface AnnotationPopupProps {
   onAnnotate: (comment: string) => void;
   onDelete: (id: string) => void;
   onSaveComment: (id: string, comment: string | null) => void;
+  /**
+   * Keep what is written so far — committing the selection if it is still a
+   * draft — and carry on in the annotation list, where the box does not sit
+   * on top of the text being written about. Handed the text as typed; blank
+   * leaves a plain highlight.
+   */
+  onMoveToPanel: (text: string) => void;
   onDismiss: () => void;
 }
 
@@ -25,6 +32,7 @@ export function AnnotationPopup({
   onAnnotate,
   onDelete,
   onSaveComment,
+  onMoveToPanel,
   onDismiss,
 }: AnnotationPopupProps) {
   // A fresh selection is first a choice between highlighting and commenting; an
@@ -33,14 +41,8 @@ export function AnnotationPopup({
   // read-only state: the text is always in the box, ready to be changed.
   const [draftEditing, setDraftEditing] = useState(false);
   const editing = popup.kind === 'view' || draftEditing;
-  const [text, setText] = useState(annotation?.comment ?? '');
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [size, setSize] = useState<PopupSize | null>(null);
-
-  useEffect(() => {
-    if (editing) textareaRef.current?.focus();
-  }, [editing]);
 
   // Measured rather than declared: the toolbar is only as wide as its two
   // buttons while the editor is a fixed column, and the card changes height the
@@ -55,8 +57,7 @@ export function AnnotationPopup({
 
   const { top, left } = placePopup(popup.anchor, popup.bounds, size ?? UNMEASURED);
 
-  const submit = () => {
-    const comment = text.trim();
+  const submit = (comment: string) => {
     if (popup.kind === 'draft') {
       if (comment) onAnnotate(comment);
       else onDismiss();
@@ -67,66 +68,6 @@ export function AnnotationPopup({
     onDismiss();
   };
 
-  // The padding belongs to each state rather than to the card, because the row
-  // of icon buttons carries its own: counted from the icons themselves the
-  // bottom would sit deeper than the top if both were the same number.
-  const editor = (
-    <div className="w-[300px] px-2 pt-2 pb-1">
-      <textarea
-        ref={textareaRef}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        // Both keys are the input method's before they are ours: mid-composition
-        // Enter turns the pre-edit into text and Escape drops the candidate, so
-        // reading `key` alone would save half a sentence, or throw one away.
-        onKeyDown={(e) => {
-          if (isSubmitEnter(e)) {
-            e.preventDefault();
-            submit();
-          } else if (isCancelEscape(e)) {
-            e.preventDefault();
-            onDismiss();
-          }
-        }}
-        rows={3}
-        placeholder="Add a comment…"
-        // `block`, or the textarea sits on the text baseline like the
-        // inline-block it is by default and leaves a line's worth of descender
-        // space under itself — which reads as the button row drifting away.
-        className="block w-full resize-none rounded-lg border border-neutral-300 bg-page px-2.5 py-1.5 text-[13px] leading-snug outline-none focus:border-amber-500"
-      />
-      <div className="mt-1 flex items-center">
-        {/* Deleting is only ever an option for something that exists, and it
-            sits apart from the two buttons that dismiss the popup. */}
-        {popup.kind === 'view' && (
-          <IconButton
-            label="Delete"
-            className="text-neutral-400 hover:bg-red-50 hover:text-red-600"
-            onClick={() => onDelete(popup.annotationId)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </IconButton>
-        )}
-        <div className="ml-auto flex items-center gap-0.5">
-          <IconButton
-            label="Cancel (Esc)"
-            className="text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
-            onClick={onDismiss}
-          >
-            <X className="h-4 w-4" />
-          </IconButton>
-          <IconButton
-            label="Save (Enter)"
-            className="text-amber-500 hover:bg-amber-50 hover:text-amber-600"
-            onClick={submit}
-          >
-            <Check className="h-4 w-4" />
-          </IconButton>
-        </div>
-      </div>
-    </div>
-  );
-
   return (
     <div
       ref={cardRef}
@@ -134,7 +75,20 @@ export function AnnotationPopup({
       style={{ top, left }}
     >
       {editing ? (
-        editor
+        // The padding belongs to each state rather than to the card, because
+        // the row of icon buttons carries its own: counted from the icons
+        // themselves the bottom would sit deeper than the top if both were the
+        // same number.
+        <div className="w-[300px] px-2 pt-2 pb-1">
+          <CommentEditor
+            initial={annotation?.comment ?? ''}
+            rows={3}
+            onSubmit={submit}
+            onCancel={onDismiss}
+            onDelete={popup.kind === 'view' ? () => onDelete(popup.annotationId) : undefined}
+            onMoveToPanel={onMoveToPanel}
+          />
+        </div>
       ) : (
         <div className="flex items-center gap-0.5 p-2">
           <ToolbarButton label="Highlight" icon={<Highlighter className="h-4 w-4" />} onClick={onHighlight} />
@@ -157,25 +111,6 @@ function ToolbarButton({ label, icon, onClick }: { label: string; icon: ReactNod
     >
       <span className="text-amber-500">{icon}</span>
       {label}
-    </button>
-  );
-}
-
-/** An icon and nothing else, so the name it carries is the only name it has. */
-function IconButton({
-  label,
-  className,
-  onClick,
-  children,
-}: {
-  label: string;
-  className: string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button className={`rounded-lg p-1.5 ${className}`} title={label} aria-label={label} onClick={onClick}>
-      {children}
     </button>
   );
 }
