@@ -3,6 +3,7 @@ mod channel;
 mod cli_install;
 mod default_app;
 mod menu;
+mod images;
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -1091,6 +1092,8 @@ pub fn run() {
         .manage(ColdStart(Mutex::new(Some(Vec::new()))))
         .manage(Quitting(AtomicBool::new(false)))
         .invoke_handler(tauri::generate_handler![
+            images::resolve_doc_images,
+            images::read_doc_image,
             read_local_file,
             read_remote_file,
             write_local_file,

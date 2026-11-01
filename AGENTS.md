@@ -104,7 +104,7 @@ pnpm build:signed  # 构建 + 签名 + 公证，产物可安装进 /Applications
 - **改标注只走 `annotate.ts`**；标注必须和文档**一起**进 store（`openDoc(doc, annotations)`），晚到的不会被渲染。
 - **标注层的 `documentKey` 是 `docId#contentHash`**，只写 docId 会在文档重开后按旧偏移高亮到错的句子。
 - 内容哈希对不上的标注在打开时直接丢弃，这是有意的。
-- Markdown 的 `contentHash` 带渲染版本后缀（`annotationContentHash`）：Front Matter 文档有 `:front-matter-v1`，所有 Markdown 有 `:list-numbers-v1`。**任何改变渲染文本（含插入文字节点）的改动都要升级或新增后缀**，否则旧偏移会静默高亮到错的句子。docId 仍只由原文 / 路径决定。
+- Markdown 的 `contentHash` 带渲染版本后缀（`annotationContentHash`）：Front Matter 文档有 `:front-matter-v1`，所有 Markdown 有 `:list-numbers-v1`，正文实际含 Obsidian 图片嵌入时另加 `:obsidian-images-v1`（放在列表后缀之后，不能走仅编号迁移）。**任何改变渲染文本（含插入文字节点）的改动都要升级或新增后缀**，否则旧偏移会静默高亮到错的句子。docId 仍只由原文 / 路径决定。
 - 有序列表编号是正文里的真实文字（`list-numbers.ts` 的 rehype 插件），参与偏移、搜索和复制；编号成为文字之前的标注在打开时精确挪过去，不丢弃。
 - recogito 必须用 `SPANS` renderer；我们放进标注容器的层都要带 `not-annotatable`；换主题用 `setStyle()`，不要重建标注层。
 - 纯图标按钮用 `components/IconButton.tsx`，不手写裸 `<button>`。
@@ -128,6 +128,7 @@ pnpm build:signed  # 构建 + 签名 + 公证，产物可安装进 /Applications
 - **`main.tsx` 里的 `watchComposition()` 不能删。** 删了真机上中文输入就坏，而测试依然全绿。
 - **Reader 从不卸载**，其它视图是盖在上面的不透明层。所以 document 级快捷键要自己判断 `enabled`（`view === 'reader' && !openDialog`）。
 - Reader 根节点的 `relative z-0` 和 `min-w-0` 都是必需的；正文不许横向滚动，超宽内容自己内部滚。
+- **图片状态始终放在 `not-annotatable` 子树内**，加载/失败不能改变标注偏移。Obsidian 语法在 `obsidian-images.ts`，本地批量定位与二进制读取在 `src-tauri/src/images.rs`，文档级 Blob 生命周期在 `doc-image.ts`；查找优先级与范围见 `kb/docs/reader-ui.md`。
 - **⌘F 用 CSS Custom Highlight API**，且只经 `find-painter.ts`：高亮对象只 `set()` 一次，之后只 `clear()` / `add()`，绝不 `delete()` 或重新 `set()`（WebKit 不重绘）。`::highlight()` 规则只能放在 `find-highlight.css`。
 - **⌘A 是自己实现的**，在 capture 阶段拦（库也绑了 ⌘A，会把整篇建成标注）。
 - **源码视图切换时三样东西要跟着重置**：搜索索引、目录构建、滚动 spy。

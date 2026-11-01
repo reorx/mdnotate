@@ -75,6 +75,13 @@ describe('edit session', () => {
   });
 
   describe('starting', () => {
+    it('stamps saved image embeds with the same rendering revision as opening', async () => {
+      editingDirty();
+      editorText = '---\ntitle: images\n---\n1. Before ![[image.webp]] after';
+      vi.mocked(writeDocFile).mockResolvedValue({ kind: 'saved', modifiedAt: 200 });
+      expect(await saveEdits()).toBe(true);
+      expect(useAppStore.getState().doc?.contentHash).toMatch(/:front-matter-v1:list-numbers-v1:obsidian-images-v1$/);
+    });
     it('edits a local file', () => {
       useAppStore.getState().openDoc(DOC);
       startEditing();

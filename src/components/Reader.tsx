@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAppStore } from '../store';
 import { createAnnotation, deleteAnnotation, moveOntoListNumbers, updateComment } from '../lib/annotate';
@@ -23,6 +23,10 @@ import { CommentMarkers } from './CommentMarkers';
 import { FindBar } from './FindBar';
 import { FrontMatter } from './FrontMatter';
 import { StatusBar } from './StatusBar';
+import { DocImage } from './DocImage';
+import { createImageSession, type ImageSession } from '../lib/doc-image';
+import { remarkObsidianImages } from '../lib/obsidian-images';
+import { isTauri } from '../lib/tauri-env';
 import { Toc } from './Toc';
 
 /**
@@ -98,6 +102,39 @@ function PanelContent({ inert, children }: { inert: boolean; children: ReactNode
 }
 
 export function Reader() {
+  const doc = useAppStore((s) => s.doc);
+  const [imageSession, setImageSession] = useState<{ doc: typeof doc; session: ImageSession } | null>(null);
+  useEffect(() => {
+    if (!doc || doc.kind !== 'file' || !isTauri) {
+      setImageSession(null);
+      return;
+    }
+    const session = createImageSession(doc.source);
+    setImageSession({ doc, session });
+    return () => session.dispose();
+  }, [doc]);
+  const imageComponents = useMemo<Components>(
+    () => ({
+      img: ({ node, src, alt, width, height }) => (
+        <DocImage
+          src={src}
+          alt={alt}
+          width={width}
+          height={height}
+          kind={doc?.kind ?? 'clipboard'}
+          session={imageSession?.doc === doc ? (imageSession?.session ?? null) : null}
+          obsidian={node?.properties['data-obsidian'] === 'true'}
+          reference={node?.properties['data-image-reference'] as string | undefined}
+        />
+      ),
+      table: ({ node: _node, ...props }) => (
+        <div className="overflow-x-auto">
+          <table {...props} />
+        </div>
+      ),
+    }),
+    [doc, imageSession],
+  );
   const content = useAppStore((s) => s.doc?.content ?? null);
   const docId = useAppStore((s) => s.doc?.id ?? null);
   const contentHash = useAppStore((s) => s.doc?.contentHash ?? null);
@@ -359,15 +396,9 @@ export function Reader() {
                     scroller no longer scrolls sideways for it — so a wide table
                     scrolls inside its own box, like `pre` always has. */}
                 <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
+                  remarkPlugins={[remarkGfm, remarkObsidianImages]}
                   rehypePlugins={[rehypeListNumbers]}
-                  components={{
-                    table: ({ node: _node, ...props }) => (
-                      <div className="overflow-x-auto">
-                        <table {...props} />
-                      </div>
-                    ),
-                  }}
+                  components={imageComponents}
                 >
                   {renderedMarkdown}
                 </ReactMarkdown>

@@ -9,6 +9,7 @@
 
 import type { DocFormat } from './doc-locator';
 import { splitFrontMatter } from './front-matter';
+import { hasObsidianImages } from './obsidian-images';
 
 export type DocKind = 'file' | 'ssh' | 'clipboard';
 
@@ -125,7 +126,10 @@ const LIST_NUMBERS_REVISION = ':list-numbers-v1';
 export function annotationContentHash(content: string, format: DocFormat): string {
   if (format !== 'markdown') return hashText(content);
   const frontMatter = splitFrontMatter(content) ? ':front-matter-v1' : '';
-  return hashText(content) + frontMatter + LIST_NUMBERS_REVISION;
+  // Replacing embed text with an image cannot be undone by removing list
+  // numbers. Keep this revision last so preListNumbersHash refuses that path.
+  const images = hasObsidianImages(splitFrontMatter(content)?.body ?? content) ? ':obsidian-images-v1' : '';
+  return hashText(content) + frontMatter + LIST_NUMBERS_REVISION + images;
 }
 
 /**
