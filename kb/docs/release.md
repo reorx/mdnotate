@@ -67,7 +67,7 @@ xcrun stapler validate <临时目录>/mdnotate.app
 
 ## 发布后升级本机
 
-用户要求本机也安装新版时，等 Release 与 cask 都更新成功，再升级正式安装。先检查 `/Applications/mdnotate.app` 是否正在运行；有未保存编辑时，通过应用自己的 ⌘Q 流程保存或取消退出，不能强制终止（Dock 退出的已知问题见 `kb/known-issues.md`）。
+新功能完成后的自动发版（规则见 `AGENTS.md`「发布」）一律升级本机；其它发版在用户要求时升级。等 Release 与 cask 都更新成功，再升级正式安装。先检查 `/Applications/mdnotate.app` 是否正在运行；有未保存编辑时，通过应用自己的 ⌘Q 流程保存或取消退出，不能强制终止（Dock 退出的已知问题见 `kb/known-issues.md`）。
 
 ```bash
 brew update
