@@ -196,7 +196,7 @@ tap 写权限使用本仓库的 `TAP_DEPLOY_KEY` secret（仅对 tap 可写的 S
 - 触发：一个新功能整体完成（通常是一份 `kb/plans/` 的计划全部做完）、测试通过、已 commit。做到一半、bug 修复、纯文档或重构都不自动发。
 - 版本号：最高 tag 的 minor 加一、patch 归零（`0.13.x` → `0.14.0`）。release skill 里列出的歧义（死 tag、版本文件落后于 tag）仍然先问。
 - 流程照 release skill 走完。版本 bump 可以单独做一个 `chore: 发布 X.Y.0` commit，只要 tag 指向它。
-- workflow 成功、cask 也更新之后再升级本机：`brew update && brew upgrade --cask reorx/tap/mdnotate`，按 `kb/docs/release.md`「发布后升级本机」核对版本。`/Applications/mdnotate.app` 正在运行时，先请用户自己 ⌘Q 退出再升级。不要 `pkill`，也不要 `osascript` 发 quit：它和 Dock 退出一样绕过保存确认，会丢掉未保存的编辑。
+- 发布完成后按 `kb/docs/release.md`「升级本机安装」升级本机的 app。
 
 ## 文档
 

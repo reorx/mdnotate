@@ -65,9 +65,9 @@ xcrun stapler validate <临时目录>/mdnotate.app
 
 签名应属于 Developer ID，Gatekeeper 应报告 `source=Notarized Developer ID`。同时检查内嵌 CLI 的签名与 `arm64 x86_64` 架构。结束后卸载 dmg、移除临时 app；若启动过测试 app，还要注销它的 LaunchServices 注册并退出测试实例。界面验收遵循 [验收手册](verification.md)，截图归档到当日任务的 `tmp/` 目录。
 
-## 发布后升级本机
+## 升级本机安装
 
-新功能完成后的自动发版（规则见 `AGENTS.md`「发布」）一律升级本机；其它发版在用户要求时升级。等 Release 与 cask 都更新成功，再升级正式安装。先检查 `/Applications/mdnotate.app` 是否正在运行；有未保存编辑时，通过应用自己的 ⌘Q 流程保存或取消退出，不能强制终止（Dock 退出的已知问题见 `kb/known-issues.md`）。
+等 Release 与 cask 都更新成功，再升级正式安装。先检查 `/Applications/mdnotate.app` 是否正在运行；运行中就请用户自己用 ⌘Q 退出，让应用的保存确认流程处理未保存的编辑。不能强制终止：`pkill` 与 `osascript` 发 quit 都和 Dock 退出一样绕过保存确认（已知问题见 `kb/known-issues.md`）。
 
 ```bash
 brew update
