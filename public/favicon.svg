@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+<defs>
+<filter id="m-sh" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity=".26"/></filter>
+<clipPath id="m-clip"><path d="M285.4,100H738.6A185.4,185.4 0 0 1 924,285.4V738.6A185.4,185.4 0 0 1 738.6,924H285.4A185.4,185.4 0 0 1 100,738.6V285.4A185.4,185.4 0 0 1 285.4,100Z"/></clipPath>
+<linearGradient id="m-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#f1eee8"/></linearGradient>
+<filter id="m-bub" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#a8430a" flood-opacity=".28"/></filter>
+</defs>
+<path d="M285.4,100H738.6A185.4,185.4 0 0 1 924,285.4V738.6A185.4,185.4 0 0 1 738.6,924H285.4A185.4,185.4 0 0 1 100,738.6V285.4A185.4,185.4 0 0 1 285.4,100Z" fill="url(#m-bg)" filter="url(#m-sh)"/>
+<g clip-path="url(#m-clip)">
+<rect x="190" y="270" width="200" height="48" rx="24" fill="#26241f"/>
+<rect x="190" y="376" width="400" height="32" rx="16" fill="#d4cfc4"/>
+<path d="M194,430L582,430L560,510L172,510Z" fill="#ffc83a" />
+<rect x="190" y="454" width="370" height="32" rx="16" fill="#6e5a1f"/>
+<rect x="190" y="532" width="400" height="32" rx="16" fill="#d4cfc4"/>
+<rect x="190" y="610" width="330" height="32" rx="16" fill="#d4cfc4"/>
+<rect x="190" y="688" width="230" height="32" rx="16" fill="#d4cfc4"/>
+<g filter="url(#m-bub)">
+<path d="M672,390H818A42,42 0 0 1 860,432V508A42,42 0 0 1 818,550H712L640,606L656,550A42,42 0 0 1 630,508V432A42,42 0 0 1 672,390Z" fill="#ff7a2e"/>
+</g>
+<rect x="668" y="436" width="152" height="24" rx="12" fill="#fff"/>
+<rect x="668" y="480" width="100" height="24" rx="12" fill="#fff"/></g>
+<path d="M285.4,100H738.6A185.4,185.4 0 0 1 924,285.4V738.6A185.4,185.4 0 0 1 738.6,924H285.4A185.4,185.4 0 0 1 100,738.6V285.4A185.4,185.4 0 0 1 285.4,100Z" fill="none" stroke="rgba(0,0,0,.07)" stroke-width="2"/>
+</svg>

@@ -57,6 +57,28 @@ ${bar(668, 480, 100, 24, '#fff')}`
   })
 }
 
+// Optical variant for the 16 pt / 32 px Finder sizes. Keep the page, palette
+// and heading/highlight/bubble composition, but remove the thin body text and
+// enlarge the remaining marks so they survive rasterisation at native pixels.
+export function mdnotateSmall() {
+  const content = `
+${bar(190, 260, 250, 72, '#26241f')}
+${marker(166, 560, 422, 550, 26, '#ffc83a')}
+${bar(190, 462, 344, 48, '#6e5a1f')}
+<g filter="url(#s-bub)">
+<path d="M674,374H812A56,56 0 0 1 868,430V526A56,56 0 0 1 812,582H714L628,646L646,576A56,56 0 0 1 618,526V430A56,56 0 0 1 674,374Z" fill="#ff7a2e"/>
+</g>
+${bar(660, 422, 164, 36, '#fff')}
+${bar(660, 492, 112, 36, '#fff')}`
+  return frame('s', {
+    bg: 'url(#s-bg)',
+    border: 'rgba(0,0,0,.07)',
+    defs: `<linearGradient id="s-bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#f1eee8"/></linearGradient>
+<filter id="s-bub" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#a8430a" flood-opacity=".28"/></filter>`,
+    content,
+  })
+}
+
 // Alternative C: a page and a speech bubble fused into one white silhouette
 // (folded corner top right, bubble tail bottom left) on a blue field.
 export function pageBubble() {
@@ -110,6 +132,7 @@ export function risoHash() {
 // Output path (relative to this directory) → drawing.
 export const ICONS = {
   'mdnotate.svg': mdnotate,
+  'mdnotate-small.svg': mdnotateSmall,
   'alternatives/page-bubble.svg': pageBubble,
   'alternatives/riso-hash.svg': risoHash,
 }

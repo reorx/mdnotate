@@ -4,6 +4,7 @@
   "version": "0.12.0",
   "type": "module",
   "scripts": {
+    "icons": "node design/app-icon/build-icons.mjs",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
