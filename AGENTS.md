@@ -19,7 +19,7 @@ src/lib/          纯逻辑 + hook，按主题：
   编辑         edit-session（编辑的唯一入口）、use-code-editor（CodeMirror 封装）、edit-text、
                edit-prompts、doc-file、reanchor（保存后标注按原文重新定位）
   标注         annotate（改标注的唯一入口）、annotations、use-text-annotator（recogito 封装）、
-               popup-position、annotation-markers、template（导出模板）
+               popup-position、annotation-markers、template（导出模板）、import-annotations（默认格式导入）
   阅读器       search + use-doc-search + find-painter（⌘F）、use-select-all（⌘A）、
                keys（按键谓词）、toc、doc-info、panels、window-drag、
                box-table（CLI 框线表格 → GFM 表格，只喂渲染器、不动 store）、
@@ -104,7 +104,7 @@ pnpm icons         # 从 design/app-icon/icons.mjs 重新生成 App 图标与 fa
 ### 标注
 
 - **标注的锚点是渲染文本的字符偏移，所以不许改动正文的文本节点。** 往正文里插元素（比如用 `<mark>` 做搜索高亮）会让所有标注错位；包一层容器可以。
-- **改标注只走 `annotate.ts`**；标注必须和文档**一起**进 store（`openDoc(doc, annotations)`），晚到的不会被渲染。
+- **改标注只走 `annotate.ts`**；打开时标注和文档**一起**进 store（`openDoc(doc, annotations)`）。导入是显式追加：提交前复检文档与渲染文本，活着的标注层按 ID 用 `addAnnotation` 补齐，不全量 `setAnnotations` 或重建实例。
 - **标注层的 `documentKey` 是 `docId#contentHash`**，只写 docId 会在文档重开后按旧偏移高亮到错的句子。
 - 内容哈希对不上的标注在打开时直接丢弃，这是有意的。
 - Markdown 的 `contentHash` 带渲染版本后缀（`annotationContentHash`）：Front Matter 文档有 `:front-matter-v1`，所有 Markdown 有 `:list-numbers-v1`，正文实际含 Obsidian 图片嵌入时另加 `:obsidian-images-v1`（放在列表后缀之后，不能走仅编号迁移）。**任何改变渲染文本（含插入文字节点）的改动都要升级或新增后缀**，否则旧偏移会静默高亮到错的句子。docId 仍只由原文 / 路径决定。
@@ -113,7 +113,7 @@ pnpm icons         # 从 design/app-icon/icons.mjs 重新生成 App 图标与 fa
 - 纯图标按钮用 `components/IconButton.tsx`，不手写裸 `<button>`。
 - 评论输入框只有 `CommentEditor` 一个，弹窗与侧栏共用。侧栏里的输入框**点外部不关**（边看正文边写是它存在的理由），弹窗点外部则丢弃。
 
-细节在 `kb/docs/annotations-and-export.md`：失效判定、弹窗与落点、评论图标层、侧栏、两层导出模板的按行规则。改 `use-text-annotator.ts`、`template.ts` 或标注相关组件之前先读。
+细节在 `kb/docs/annotations-and-export.md`：失效判定、弹窗与落点、评论图标层、侧栏、两层导出模板、默认格式导入。改标注封装、模板、导入或标注组件之前先读。
 
 ### 编辑
 

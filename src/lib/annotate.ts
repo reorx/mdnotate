@@ -2,6 +2,7 @@ import { useAppStore } from '../store';
 import type { Annotation } from './annotations';
 import { forgetAnnotation, rebaseAnnotations, recordAnnotation } from './annotations-db';
 import { remapToListNumbers, type TextSegment } from './list-numbers';
+import { previewAnnotationImport, type AnnotationImportPreview } from './import-annotations';
 
 /**
  * The one way an annotation changes. Like `open-doc`, the store is written
@@ -61,4 +62,69 @@ export function moveOntoListNumbers(segments: TextSegment[]): void {
   } else if (lost.length > 1) {
     setError(`${lost.length} annotations discarded: this document has changed since they were made`);
   }
+}
+
+export interface AnnotationImportResult {
+  status: 'imported' | 'stale' | 'empty';
+  saved: number;
+  failed: number;
+}
+
+/**
+ * Import is an explicit append through the same memory-first funnel as a mouse
+ * highlight. Revalidate immediately before mutation, then capture the document
+ * for every write: awaiting storage must never retarget a later document.
+ * Reserving all IDs in memory before the first await also makes repeated
+ * submissions deduplicate against the batch already in flight.
+ *
+ * Persistence is per row, as for ordinary annotation creation. There is no
+ * transaction/rollback promise: return exact saved/failed counts and retain
+ * failed rows on screen so the user can export them before leaving.
+ */
+export async function importAnnotations(
+  preview: AnnotationImportPreview,
+  readText: () => string | null,
+): Promise<AnnotationImportResult> {
+  const state = useAppStore.getState();
+  const text = readText();
+  if (
+    state.doc !== preview.doc ||
+    state.editing ||
+    state.view !== 'reader' ||
+    state.openDialog ||
+    state.annotationsHash !== preview.doc.contentHash ||
+    text === null ||
+    text !== preview.text
+  ) {
+    return { status: 'stale', saved: 0, failed: 0 };
+  }
+  // Rechecking may demote a row, never promote one the user saw as skipped.
+  const approved = new Set(preview.rows.filter((row) => row.status === 'ready').map((row) => row.number));
+  const ready = previewAnnotationImport(preview.input, text, state.annotations).filter(
+    (row) => row.status === 'ready' && approved.has(row.number),
+  );
+  if (!ready.length) return { status: 'empty', saved: 0, failed: 0 };
+  const now = Date.now();
+  const added: Annotation[] = ready.map((row) => ({
+    id: crypto.randomUUID(),
+    quote: row.quote,
+    comment: row.comment,
+    start: row.start!,
+    end: row.end!,
+    createdAt: now,
+    updatedAt: now,
+  }));
+  for (const annotation of added) state.addAnnotation(annotation);
+  const results = await Promise.allSettled(
+    added.map((annotation) => recordAnnotation(preview.doc.id, preview.doc.contentHash, annotation)),
+  );
+  const failures = results.filter((result) => result.status === 'rejected');
+  if (failures.length) {
+    const reason = failures[0] as PromiseRejectedResult;
+    report(
+      'save imported annotations',
+      `${failures.length} of ${added.length} not saved; export them before leaving. ${reason.reason}`,
+    );
+  }
+  return { status: 'imported', saved: added.length - failures.length, failed: failures.length };
 }

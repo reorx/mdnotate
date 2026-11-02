@@ -1,6 +1,6 @@
 ---
 created: 2026-09-28
-updated: 2026-11-01
+updated: 2026-11-02
 tags:
   - annotations
   - recogito
@@ -53,7 +53,7 @@ highlight 与 comment 是同一结构，`comment === null` 即纯高亮。界面
 
 - **改标注只走 `annotate` 这一个漏斗**：先写 store 后写库，写库失败只出提示。
 - 写入是 upsert，只更新 comment 和更新时间。quote 与偏移在提交那一刻就固定了；唯一的例外是它们下面的文本变了的时候（保存编辑、编号成为文字），由 `rebaseAnnotations` 一起改写。
-- **标注必须与文档同时进 store。** 标注层只在创建时读一次标注，异步晚到的不会被渲染，所以文档和它的标注是一次性写入的。
+- **打开时标注必须与文档同时进 store。** 文档和恢复的标注一次性写入，避免先启用标注层、再恢复旧偏移。阅读期间显式导入的新增条目会追加到现有高亮层，保留选区、滚动位置和侧栏评论草稿。
 - **标注层的 key 是 `docId#contentHash`，不能只写 docId。** 同一个文档被重开是常态（刷新按钮、双击已开着的文档、Recent 里点回来），此时 docId 不变、正文却可能已被换掉。只按 docId 建 key，标注层会留在原地，继续按旧偏移在新正文上画高亮。内容没变时哈希不变、标注层不重建，草稿、选区、滚动位置全部原地保留 —— 这是刷新一个没被改过的文件时的正常结果。
 
 ## 标注库（recogito）的约束
@@ -136,6 +136,18 @@ highlight 与 comment 是同一结构，`comment === null` 即纯高亮。界面
 
 渲染成空的条目会被跳过，否则条目之间会多出一个空行。
 
+## 导入默认格式的标注
+
+阅读器底部状态栏的 Import 在没有标注时也可用。粘贴默认模板导出的 Markdown，点击 Preview 核对每条引用、评论和处理结果，再导入有效条目；取消不写入。导入层覆盖阅读器，正文快捷键暂停，下面的侧栏评论草稿继续保留。源码视图、编辑模式与标注重新定位期间不能导入；换文档或内容变化会清掉旧面板，修改输入后要重新预览。
+
+支持可选路径标题、纯高亮、多行引用和多段评论。路径标题只作说明，始终导入当前文档。每条引用行只剥离默认导出加上的一层 `> `，保留字面 Markdown、空格、标点和嵌套引用；只统一 CRLF / CR 为 LF，不渲染或规范化引用文字。引用中的空行应为默认导出的 `> ` 行。
+
+定位用可标注正文的原样文本，和高亮层数偏移的规则一致：Front Matter 字段与列表编号参与定位，图片加载提示和其它 `not-annotatable` 内容不参与。引用唯一匹配才可导入；找不到、多处出现（包括重叠匹配）和格式错误分别显示原因，不猜位置。同一位置、引用、评论都相同的条目在已有标注和本批次中去重；相同引用的不同评论各自保留。
+
+默认导出没有 ID、时间和位置，恢复的条目会得到新 ID 与时间。它也没有转义条目边界：空行后出现引用行会被当作下一条，评论内部不带分隔空行的引用行会报格式问题；连续引用行也无法普遍区分是引用还是评论。条目分隔和文件尾部的空行会被移除，不能据此恢复评论末尾的空行。预览用于核对这些边界，不能承诺任意历史评论无损往返，也不支持自定义模板。
+
+提交时重新检查文档身份、渲染文本、可标注状态和已有条目，避免过期预览或重复点击产生错误写入。导入只追加，立即显示高亮、评论图标和侧栏，可直接跳转、编辑、删除和再导出。持久化沿用现有单条写入，没有批量事务：部分失败时明确显示已保存和未保存数量，失败条目留在当前页面，并提示离开前导出保留副本。异步写入始终绑定提交时的文档，不会改写后来打开的文档。
+
 ## 代码位置
 
 - `src/lib/annotations.ts` —— 数据模型、失效判定、导出序列化（`tests/annotations.test.ts`）
@@ -143,5 +155,6 @@ highlight 与 comment 是同一结构，`comment === null` 即纯高亮。界面
 - `src/lib/use-text-annotator.ts` —— 标注库的封装：draft 生命周期、弹窗锚点、图标同步
 - `src/lib/popup-position.ts`、`src/lib/annotation-markers.ts` —— 落点几何，纯规则
 - `src/lib/template.ts` —— 两层模板（`tests/template.test.ts`）
+- `src/lib/import-annotations.ts`、`src/components/ImportAnnotations.tsx` —— 默认格式解析、定位、预览（`tests/import-annotations*.test.ts` 包含服务与浏览器存储行为）
 - `src/lib/list-numbers.ts` 的 `remapToListNumbers`、`annotate.ts` 的 `moveOntoListNumbers`、`recent-docs.ts` 的 `preListNumbersHash` —— 编号成为文字前的标注的挪动（`tests/list-numbers.test.tsx`、`tests/list-numbers-migration.test.ts`）
 - `src/components/AnnotationPopup.tsx`、`CommentEditor.tsx`、`CommentMarkers.tsx`、`AnnotationList.tsx`、`ExportView.tsx`、`IconButton.tsx`

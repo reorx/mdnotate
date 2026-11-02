@@ -28,6 +28,8 @@ import { createImageSession, type ImageSession } from '../lib/doc-image';
 import { remarkObsidianImages } from '../lib/obsidian-images';
 import { isTauri } from '../lib/tauri-env';
 import { Toc } from './Toc';
+import { ImportAnnotations } from './ImportAnnotations';
+import { importUnavailableReason } from '../lib/import-annotations';
 
 /**
  * The hairline between a panel and the document, and the drag that resizes the
@@ -165,6 +167,16 @@ export function Reader() {
   // rendered as always.
   const [sourceView, setSourceView] = useState(false);
   const showingSource = sourceView && format === 'markdown';
+  const [importOpen, setImportOpen] = useState(false);
+  const importDisabledReason = importUnavailableReason({
+    editing,
+    sourceView: showingSource,
+    annotationsHash,
+    contentHash,
+  });
+  // Any navigation or rendering revision discards the old preview. Keeping the
+  // sidebar mounted underneath preserves its unsaved comment text.
+  useEffect(() => setImportOpen(false), [doc, editing, showingSource, view, openDialog, annotationsHash]);
 
   useEffect(() => setSourceView(false), [docId]);
   // Editing replaces whichever view was up, and leaving it comes back to the
@@ -213,13 +225,16 @@ export function Reader() {
     containerRef: annotator.containerRef,
     scrollRef,
     revision: `${docId}#${contentHash}#${showingSource}`,
-    enabled: !!content && view === 'reader' && !openDialog && !editing,
+    enabled: !!content && view === 'reader' && !openDialog && !editing && !importOpen,
     onTakeSelection: annotator.dismissPopup,
   });
 
   // In the editor both keys are the editor's own: ⌘F opens its search panel
   // and ⌘A selects all of its text, not just the lines it has drawn.
-  useSelectAll({ targetRef: articleRef, enabled: !!content && view === 'reader' && !openDialog && !editing });
+  useSelectAll({
+    targetRef: articleRef,
+    enabled: !!content && view === 'reader' && !openDialog && !editing && !importOpen,
+  });
   useSaveShortcut(editing && view === 'reader' && !openDialog);
 
   // A save has just replaced the text under the annotations. The rendered
@@ -357,7 +372,7 @@ export function Reader() {
     <div ref={rootRef} className="relative z-0 flex min-h-0 min-w-0 flex-1">
       {sidebarOpen && (
         <>
-          <aside className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50" style={{ width: panels.toc }}>
+          <aside inert={importOpen} className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50" style={{ width: panels.toc }}>
             <PanelContent inert={showingSource || editing}>
               <Toc items={toc} activeId={activeId} onJump={jumpTo} />
             </PanelContent>
@@ -366,16 +381,16 @@ export function Reader() {
         </>
       )}
       {/* A positioned box around the scroller, and nothing else: the find bar
-          has to stay put while the document scrolls under it, which it could
-          not do from inside the scroller. */}
-      <div className="relative flex min-w-0 flex-1 flex-col">
+        has to stay put while the document scrolls under it, which it could
+        not do from inside the scroller. */}
+      <div inert={importOpen} className="relative flex min-w-0 flex-1 flex-col">
         {/* Focusable, and the only thing here that is: a click on the prose has
-            to land somewhere for ⌘A to mean this document rather than this
-            window — and, incidentally, for the space bar and the arrow keys to
-            scroll it at all.
+          to land somewhere for ⌘A to mean this document rather than this
+          window — and, incidentally, for the space bar and the arrow keys to
+          scroll it at all.
 
-            Hidden rather than unmounted while editing: the rendered document
-            is what a save's re-anchoring reads the new text from. */}
+          Hidden rather than unmounted while editing: the rendered document
+          is what a save's re-anchoring reads the new text from. */}
         <div
           ref={scrollRef}
           tabIndex={-1}
@@ -385,16 +400,16 @@ export function Reader() {
         >
           <div ref={annotator.containerRef} className="prose-column relative mx-auto px-8 py-6">
             {/* Two things end up here as text shown exactly as written: a plain
-                document, and the Markdown behind a rendered one. Running either
-                through the Markdown renderer would turn a leading # into a
-                heading, and collapse the line breaks that a log, or a source
-                listing, depends on. */}
+              document, and the Markdown behind a rendered one. Running either
+              through the Markdown renderer would turn a leading # into a
+              heading, and collapse the line breaks that a log, or a source
+              listing, depends on. */}
             {format === 'markdown' && !showingSource ? (
               <article ref={articleRef} className="prose-dense">
                 {frontMatter && <FrontMatter yaml={frontMatter.yaml} />}
                 {/* A table cannot wrap below its min-content width, and the
-                    scroller no longer scrolls sideways for it — so a wide table
-                    scrolls inside its own box, like `pre` always has. */}
+                  scroller no longer scrolls sideways for it — so a wide table
+                  scrolls inside its own box, like `pre` always has. */}
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkObsidianImages]}
                   rehypePlugins={[rehypeListNumbers]}
@@ -446,13 +461,15 @@ export function Reader() {
             showingSource={showingSource}
             editing={editing}
             onToggleSource={() => setSourceView((showing) => !showing)}
+            importDisabledReason={importDisabledReason}
+            onImport={() => setImportOpen(true)}
           />
         )}
       </div>
       {annotationsOpen && (
         <>
           <PanelResizeHandle side="annotations" containerRef={rootRef} />
-          <aside className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50" style={{ width: panels.annotations }}>
+          <aside inert={importOpen} className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50" style={{ width: panels.annotations }}>
             <PanelContent inert={showingSource || editing}>
               <AnnotationList
                 annotations={annotations}
@@ -471,6 +488,16 @@ export function Reader() {
             </PanelContent>
           </aside>
         </>
+      )}
+      {importOpen && doc && (
+        <ImportAnnotations
+          doc={doc}
+          readText={() => {
+            const container = annotator.containerRef.current;
+            return !container || importDisabledReason ? null : collectAnnotatableText(container);
+          }}
+          onClose={() => setImportOpen(false)}
+        />
       )}
     </div>
   );

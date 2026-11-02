@@ -259,11 +259,23 @@ export function useTextAnnotator({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, documentKey]);
 
-  // Adding or clearing a comment moves no rectangle, so the redraw it triggers
-  // may well paint the very same layer — but it does change which highlights
-  // get an icon.
+  // Explicit imports append to the live instance. Never replace its full set:
+  // it can contain an uncommitted draft that is deliberately absent from the
+  // store. Ordinary mouse creation already exists in the instance, so checking
+  // IDs also prevents double insertion. Programmatic addAnnotation is REMOTE
+  // in the library API; it does not feed a user create event back into storage.
+  // Comments still use saveComment above; refresh their icons even if their
+  // rectangles did not move.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(refreshMarkers, [annotations]);
+  useEffect(() => {
+    const anno = annoRef.current;
+    if (anno) {
+      for (const annotation of annotations) {
+        if (!anno.getAnnotationById(annotation.id)) anno.addAnnotation(toRecogitoAnnotation(annotation));
+      }
+    }
+    refreshMarkers();
+  }, [annotations]);
 
   // Restyling in place rather than through the effect above: rebuilding the
   // annotator on a theme change would throw away the draft and the selection.
