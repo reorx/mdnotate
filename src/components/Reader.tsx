@@ -372,7 +372,11 @@ export function Reader() {
     <div ref={rootRef} className="relative z-0 flex min-h-0 min-w-0 flex-1">
       {sidebarOpen && (
         <>
-          <aside inert={importOpen} className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50" style={{ width: panels.toc }}>
+          <aside
+            inert={importOpen}
+            className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50"
+            style={{ width: panels.toc }}
+          >
             <PanelContent inert={showingSource || editing}>
               <Toc items={toc} activeId={activeId} onJump={jumpTo} />
             </PanelContent>
@@ -461,15 +465,17 @@ export function Reader() {
             showingSource={showingSource}
             editing={editing}
             onToggleSource={() => setSourceView((showing) => !showing)}
-            importDisabledReason={importDisabledReason}
-            onImport={() => setImportOpen(true)}
           />
         )}
       </div>
       {annotationsOpen && (
         <>
           <PanelResizeHandle side="annotations" containerRef={rootRef} />
-          <aside inert={importOpen} className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50" style={{ width: panels.annotations }}>
+          <aside
+            inert={importOpen}
+            className="max-w-[40%] shrink-0 overflow-y-auto bg-neutral-50"
+            style={{ width: panels.annotations }}
+          >
             <PanelContent inert={showingSource || editing}>
               <AnnotationList
                 annotations={annotations}
@@ -484,6 +490,8 @@ export function Reader() {
                 onEditDone={() => setListEditor(null)}
                 onSaveComment={annotator.saveComment}
                 onDelete={annotator.deleteAnnotation}
+                importDisabledReason={importDisabledReason}
+                onImport={() => setImportOpen(true)}
               />
             </PanelContent>
           </aside>

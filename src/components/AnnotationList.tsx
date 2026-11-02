@@ -20,6 +20,8 @@ interface AnnotationListProps {
   onEditDone: () => void;
   onSaveComment: (id: string, comment: string | null) => void;
   onDelete: (id: string) => void;
+  importDisabledReason: string | null;
+  onImport: () => void;
 }
 
 export function AnnotationList({
@@ -31,6 +33,8 @@ export function AnnotationList({
   onEditDone,
   onSaveComment,
   onDelete,
+  importDisabledReason,
+  onImport,
 }: AnnotationListProps) {
   const activeRef = useRef<HTMLDivElement | null>(null);
 
@@ -48,6 +52,15 @@ export function AnnotationList({
       <div className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[12px] font-medium text-neutral-500">
         Annotations
         <span className="tabular-nums text-neutral-400">{annotations.length}</span>
+        <button
+          aria-label="Import annotations"
+          title={importDisabledReason ?? 'Import annotations from default Markdown export'}
+          disabled={!!importDisabledReason}
+          onClick={onImport}
+          className="-my-0.5 ml-auto shrink-0 rounded px-1.5 py-0.5 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800 focus-visible:outline-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Import
+        </button>
       </div>
       {annotations.length === 0 ? (
         <p className="px-3 py-2 text-[12px] text-neutral-400">No annotations yet</p>

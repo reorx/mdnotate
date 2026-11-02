@@ -1,7 +1,7 @@
 {
   "name": "mdnotate",
   "private": true,
-  "version": "0.14.0",
+  "version": "0.14.1",
   "type": "module",
   "scripts": {
     "icons": "node design/app-icon/build-icons.mjs",

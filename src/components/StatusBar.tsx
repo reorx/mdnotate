@@ -12,8 +12,6 @@ interface StatusBarProps {
   /** Whether the document is open in the code editor. */
   editing: boolean;
   onToggleSource: () => void;
-  importDisabledReason: string | null;
-  onImport: () => void;
 }
 
 /**
@@ -24,15 +22,7 @@ interface StatusBarProps {
  * It belongs to the middle column alone, between the two panel dividers, and
  * sits outside the scroller so it stays put while the document moves.
  */
-export function StatusBar({
-  content,
-  format,
-  showingSource,
-  editing,
-  onToggleSource,
-  importDisabledReason,
-  onImport,
-}: StatusBarProps) {
+export function StatusBar({ content, format, showingSource, editing, onToggleSource }: StatusBarProps) {
   // Measuring an eight-megabyte document walks all of it, twice. Once per
   // document is fine; once per render would not be.
   const stats = useMemo(() => docStats(content), [content]);
@@ -51,15 +41,6 @@ export function StatusBar({
       <span className="shrink-0 tabular-nums">
         {stats.chars} chars · {stats.size}
       </span>
-      <button
-        aria-label="Import annotations"
-        title={importDisabledReason ?? 'Import annotations from default Markdown export'}
-        disabled={!!importDisabledReason}
-        onClick={onImport}
-        className="shrink-0 rounded px-1 hover:bg-neutral-100 hover:text-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Import
-      </button>
       <div className="flex-1" />
       {/* Said out loud, because the two panels going quiet is otherwise the
           only sign of it — and looks like something broken. `min-w-0` so a
