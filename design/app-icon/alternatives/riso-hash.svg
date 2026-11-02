@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+<defs>
+<filter id="d-sh" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity=".26"/></filter>
+<clipPath id="d-clip"><path d="M285.4,100H738.6A185.4,185.4 0 0 1 924,285.4V738.6A185.4,185.4 0 0 1 738.6,924H285.4A185.4,185.4 0 0 1 100,738.6V285.4A185.4,185.4 0 0 1 285.4,100Z"/></clipPath>
+<filter id="d-grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="7"/><feColorMatrix values="0 0 0 0 .35  0 0 0 0 .32  0 0 0 0 .28  0 0 0 .55 -.12"/></filter>
+</defs>
+<path d="M285.4,100H738.6A185.4,185.4 0 0 1 924,285.4V738.6A185.4,185.4 0 0 1 738.6,924H285.4A185.4,185.4 0 0 1 100,738.6V285.4A185.4,185.4 0 0 1 285.4,100Z" fill="#f3f0ea" filter="url(#d-sh)"/>
+<g clip-path="url(#d-clip)">
+<g style="mix-blend-mode:multiply">
+<g transform="translate(-5,4)" stroke="#1f6fd1" stroke-width="86" stroke-linecap="round" fill="none">
+<line x1="446" y1="262" x2="398" y2="762"/>
+<line x1="642" y1="262" x2="594" y2="762"/>
+<line x1="300" y1="414" x2="748" y2="414"/>
+<line x1="282" y1="612" x2="730" y2="612"/>
+</g>
+</g>
+<g style="mix-blend-mode:multiply"><path d="M222,462L826,462L800,566L196,566Z" fill="#ffe14a" transform="rotate(-5 512 512)"/></g>
+<g style="mix-blend-mode:multiply"><path d="M682,176H836A44,44 0 0 1 880,220V306A44,44 0 0 1 836,350H730L660,410L676,350A44,44 0 0 1 638,306V220A44,44 0 0 1 682,176Z" fill="#ff5ca8"/></g>
+<rect x="0" y="0" width="1024" height="1024" filter="url(#d-grain)" opacity=".5" style="mix-blend-mode:multiply"/></g>
+<path d="M285.4,100H738.6A185.4,185.4 0 0 1 924,285.4V738.6A185.4,185.4 0 0 1 738.6,924H285.4A185.4,185.4 0 0 1 100,738.6V285.4A185.4,185.4 0 0 1 285.4,100Z" fill="none" stroke="rgba(0,0,0,.06)" stroke-width="2"/>
+</svg>

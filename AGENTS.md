@@ -41,6 +41,7 @@ src-tauri/src/    lib.rs（文档路由、窗口注册表、commands、migration
 src-tauri/cli/    `mdnotate` 命令，独立 crate `mdnotate-cli`
 scripts/          build-cli.sh、build-signed.sh、bump-version.sh、release-status.sh
 skills/           /mdnotate 与 /mdnotate-last 两个 Agent Skill（用前要 symlink，见 skills/README.md）
+design/app-icon/  App 图标的源头：icons.mjs 用代码画 SVG，export.mjs 导出定稿与两个备选
 tests/            vitest，覆盖 src/lib 的纯逻辑
 kb/               知识库：docs / notes / sessions / plans
 ```
@@ -203,6 +204,7 @@ tap 写权限使用本仓库的 `TAP_DEPLOY_KEY` secret（仅对 tap 可写的 S
 - `kb/docs/mdnotate-cli.md` —— 改 `mdnotate` 命令、它的打包签名、安装卡片、Agent Skill 时读
 - `kb/docs/verification.md` —— 验收任何改动之前读
 - `kb/docs/release.md` —— 发布前的版本与测试预检、签名产物和 Homebrew 验证、发布失败排查
+- `kb/docs/app-icon.md` —— 改 App 图标、重新生成 `src-tauri/icons/`、或想换图标方向（有两个备选）时读
 
 其它：
 
