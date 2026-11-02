@@ -41,7 +41,8 @@ src-tauri/src/    lib.rs（文档路由、窗口注册表、commands、migration
 src-tauri/cli/    `mdnotate` 命令，独立 crate `mdnotate-cli`
 scripts/          build-cli.sh、build-signed.sh、bump-version.sh、release-status.sh
 skills/           /mdnotate 与 /mdnotate-last 两个 Agent Skill（用前要 symlink，见 skills/README.md）
-design/app-icon/  App 图标的源头：icons.mjs 用代码画 SVG，export.mjs 导出定稿与两个备选
+design/app-icon/  App 图标的源头：icons.mjs 用代码画定稿、小尺寸版与两个备选；build-icons.mjs 由它生成
+                  src-tauri/icons/ 与 public/favicon.svg，这些生成物不要手改
 tests/            vitest，覆盖 src/lib 的纯逻辑
 kb/               知识库：docs / notes / sessions / plans
 ```
@@ -57,6 +58,7 @@ cargo test --manifest-path src-tauri/Cargo.toml -p mdnotate-cli  # CLI 的全部
 ./scripts/build-cli.sh   # 单独构建 CLI；dev 与 build 都会自动调它
 pnpm tauri build   # 产出 .app 与 .dmg，无签名凭据时是 ad-hoc 产物，只能原地运行
 pnpm build:signed  # 构建 + 签名 + 公证，产物可安装进 /Applications
+pnpm icons         # 从 design/app-icon/icons.mjs 重新生成 App 图标与 favicon（要 Homebrew 的 resvg）
 ```
 
 ## 开发约定
