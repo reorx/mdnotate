@@ -1,6 +1,6 @@
 ---
 created: 2026-10-21
-updated: 2026-10-21
+updated: 2026-11-02
 tags:
   - release
   - macos
@@ -64,6 +64,19 @@ xcrun stapler validate <临时目录>/mdnotate.app
 ```
 
 签名应属于 Developer ID，Gatekeeper 应报告 `source=Notarized Developer ID`。同时检查内嵌 CLI 的签名与 `arm64 x86_64` 架构。结束后卸载 dmg、移除临时 app；若启动过测试 app，还要注销它的 LaunchServices 注册并退出测试实例。界面验收遵循 [验收手册](verification.md)，截图归档到当日任务的 `tmp/` 目录。
+
+## 发布后升级本机
+
+用户要求本机也安装新版时，等 Release 与 cask 都更新成功，再升级正式安装。先检查 `/Applications/mdnotate.app` 是否正在运行；有未保存编辑时，通过应用自己的 ⌘Q 流程保存或取消退出，不能强制终止（Dock 退出的已知问题见 `kb/known-issues.md`）。
+
+```bash
+brew update
+brew upgrade --cask reorx/tap/mdnotate
+brew list --cask --versions mdnotate
+/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' /Applications/mdnotate.app/Contents/Info.plist
+```
+
+核对 Homebrew 安装记录与 app 包里的版本号都等于本次 tag，并对 `/Applications/mdnotate.app` 重做签名、公证票据与 Gatekeeper 检查。包内 `Contents/Resources/bin/mdnotate --version` 也应输出同一版本；没有安装独立 CLI 链接时直接运行包内命令即可。若本次包含图标更新，再用 `cmp` 检查包内 `Contents/Resources/icon.icns` 与仓库的 `src-tauri/icons/icon.icns` 一致。
 
 ## 失败与已发布产物
 
