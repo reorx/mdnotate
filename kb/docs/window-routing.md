@@ -1,6 +1,6 @@
 ---
 created: 2026-09-28
-updated: 2026-10-21
+updated: 2026-11-09
 tags:
   - multi-window
   - routing
@@ -31,7 +31,7 @@ macOS 的 `RunEvent::Opened`、argv、single-instance 转发、窗口 DragDrop �
 
 1. **已经开着这个文档的窗口 → 送回那个窗口。** 两个窗口读同一文档会往同一批标注行里各写各的、互相看不见，这是必须避掉的数据打架。
 2. **还停在首页的空窗口 → 就地填进去。**
-3. **否则开新窗口。** label 是 `doc-N`（`main` 来自 config，N 从 1 递增且不复用）；位置从最前面那个窗口 `+28px` 级联，撞到工作区边缘就回到左上角重来。
+3. **否则开新窗口。** label 是 `doc-N`（N 从 1 递增且不复用）；使用上次用户调整的大小和位置，目标位置已有窗口时按 28pt 向右下避让。
 
 两个例外：
 
@@ -60,11 +60,21 @@ Rust 侧 `Windows(Mutex<HashMap<label, WindowEntry>>)` 记录每个窗口的四�
 
 它在两处被调用：打开成功之后，以及打开失败的 `catch` 里。**失败路径必须回报** —— 窗口在路由的那一刻就被乐观地标成「装着这个文档」了，读失败若不纠正，再打开同一个文档就只会聚焦这个根本没打开成功的窗口。写在 `catch` 而不是 `finally`：成功时已经报过一次，放 `finally` 会让每次正常打开都多一次 IPC 和一次 `setTitle`。
 
+## 窗口的大小与位置
+
+所有窗口（启动的 `main`、⌘N、文档需要的新窗口）都经 `build_window()`，从同一份 config 克隆标题栏、最小尺寸等属性，再应用记住的 frame。frame 是 logical points 下的外框左上角和内容尺寸，存在 AppData 的 `window.json`，由 Rust 的 store 插件管理。
+
+窗口建好后先登记实际 frame。随后 Moved / Resized 事件读到的 frame 与已知值每个字段相差不到 1pt 时忽略；有变化才更新已知值和持久化值。这样程序创建、级联窗口不会覆盖用户的选择，重启也不会越漂越远。全屏和最小化期间不记录；窗口销毁时删掉已知值。不能查询 `is_maximized()`：tao 在 macOS 上判断 zoom 会临时改变 style mask。
+
+新窗口优先用记住的 frame；尚无记录时，用最前窗口的位置和 config 默认尺寸；连窗口都没有时交给系统选位置。布局先选和 frame 重叠最多的显示器工作区；没有重叠时回到主屏，适用于拔掉外接屏的情况。尺寸大于工作区就收小，位置挪到整个窗口都在工作区内。
+
+已有窗口左上角与目标点的 x、y 距离都小于 14pt 时，向右下移动 28pt，逐个避让。下一步会越过工作区右边或下边时，回到工作区左上角加 28pt；窗口几乎占满工作区时，这个偏移也会收回屏内。尝试次数受窗口数量限制，绕回仍被占时允许重叠，避免无限循环。程序纠正屏幕外的位置也不会改写记住的 frame。
+
 ## 冷启动：文档比窗口来得早
 
-Tauri 的 config 窗口是在它自己的 `setup()` 里建的，而 `setup()` 挂在事件循环的 Ready 上。macOS 双击文档启动 app 时，`application:openURLs:` **先于** Ready 到达。
+main 的 config 设置 `create: false`，应用的 `setup()` 第一件事经 `build_window()` 自己创建 main，才能在创建前恢复 frame。`setup()` 挂在事件循环的 Ready 上；macOS 双击文档启动 app 时，`application:openURLs:` **先于** Ready 到达。
 
-早到的文档如果当场路由，会发现一个窗口都没有，于是开一个新窗口，随后 config 窗口再空着弹出来。所以它们先攒在 `ColdStart` 缓冲里，等 `.setup()`（Tauri 建完窗口才调）再逐个路由。
+早到的文档如果当场路由，会发现一个窗口都没有，于是开一个新窗口，随后 main 再空着弹出来。所以它们先攒在 `ColdStart` 缓冲里，等 `setup()` 建好 main、处理非 macOS argv 后再逐个路由。不要删除 `create: false`：Tauri 会先建同名窗口，应用再次建 main 就会报错。
 
 缓冲是 `Mutex<Option<Vec<_>>>`：`Some` 即「还在启动中」，标志位和缓冲区是同一个东西。
 
@@ -119,6 +129,7 @@ App 菜单里唯一被换掉的是 Quit：系统自带的那项发 `terminate:`�
 ## 代码位置
 
 - `src-tauri/src/lib.rs` —— `open_spec` / `choose_target` / `spawn_entry` / `Windows` / `ColdStart`，前两者的规则有 `#[cfg(test)]` 单测
+- `src-tauri/src/window_frame.rs` —— frame 校验、屏幕归属与避让规则、用户调整与持久化；纯规则有 `#[cfg(test)]` 单测
 - `src-tauri/src/menu.rs` —— 菜单补丁与兜底
 - `src-tauri/capabilities/default.json` —— 窗口权限
 - `src/lib/window-doc.ts` —— `announceDoc()`

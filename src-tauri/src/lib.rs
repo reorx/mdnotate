@@ -4,6 +4,7 @@ mod cli_install;
 mod default_app;
 mod menu;
 mod images;
+mod window_frame;
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -117,7 +118,7 @@ struct WindowEntry {
     pending: Option<String>,
 }
 
-/// Labels for the windows opened after the first. `main` comes from the config
+/// Labels for the windows opened after the first. `main` is built during setup
 /// and these count on from it, never reused, so one label never names two
 /// windows over the life of the app.
 struct NextLabel(AtomicUsize);
@@ -131,8 +132,8 @@ struct Incoming {
 /// Documents that arrived before there was anywhere to put them.
 ///
 /// An app launched by double-clicking a document is handed it before the event
-/// loop reports itself ready — and the window in the config is not created
-/// until it does, in Tauri's own `setup`. Routed on arrival, that document
+/// loop reports itself ready — and our `setup` creates `main` only once it
+/// does. Routed on arrival, that document
 /// would find no windows at all and open one of its own, with the configured
 /// window turning up empty behind it. So it waits here until there is one.
 ///
@@ -252,7 +253,7 @@ fn window_states(app: &AppHandle) -> Vec<WindowState> {
 /// be told from the spec alone. Without it the document cannot be recognised as
 /// already open, and gets a window of its own.
 fn open_spec(app: &AppHandle, spec: String, doc_id: Option<String>, dropped_on: Option<&str>) {
-    // Nothing can be routed before the app has the window its config asks for.
+    // Nothing can be routed before setup has built the initial window.
     if let Some(waiting) = app.state::<ColdStart>().0.lock().unwrap().as_mut() {
         waiting.push(Incoming { spec, doc_id });
         return;
@@ -319,22 +320,25 @@ fn spawn_window(app: &AppHandle, doc: Option<Incoming>) -> tauri::Result<()> {
         .unwrap()
         .insert(label.clone(), spawn_entry(doc));
 
-    // Cloned from the window in the config, so that a second window is the
-    // first one in every respect that was configured — overlay title bar,
-    // traffic light position, minimum size.
-    let mut config = window_config(app);
-    config.label = label.clone();
-    let built = WebviewWindowBuilder::from_config(app, &config).and_then(|builder| {
-        match cascade_origin(app) {
-            Some((x, y)) => builder.position(x, y),
-            None => builder,
-        }
-        .build()
-    });
+    let built = build_window(app, &label);
     if built.is_err() {
         app.state::<Windows>().0.lock().unwrap().remove(&label);
     }
     built.map(|_| ())
+}
+
+/// The only construction path, including main (config has `create: false`).
+/// Keep configured chrome and constraints while restoring the user's frame.
+fn build_window(app: &AppHandle, label: &str) -> tauri::Result<WebviewWindow> {
+    let mut config = window_config(app);
+    config.label = label.to_string();
+    let mut builder = WebviewWindowBuilder::from_config(app, &config)?;
+    if let Some(frame) = window_frame::initial_frame(app) {
+        builder = builder.position(frame.x, frame.y).inner_size(frame.width, frame.height);
+    }
+    let window = builder.build()?;
+    window_frame::register(&window)?;
+    Ok(window)
 }
 
 fn window_config(app: &AppHandle) -> WindowConfig {
@@ -344,34 +348,6 @@ fn window_config(app: &AppHandle) -> WindowConfig {
         .first()
         .cloned()
         .unwrap_or_default()
-}
-
-/// How far a new window is laid down and to the right of the one in front, so
-/// that it does not land exactly on top of it and look like nothing happened.
-const CASCADE_STEP: f64 = 28.0;
-
-/// Where to put a new window: stepped off the one in front, and back to the top
-/// left of the screen before the step would walk it off the bottom right.
-fn cascade_origin(app: &AppHandle) -> Option<(f64, f64)> {
-    let front = front_window(app)?;
-    let scale = front.scale_factor().ok()?;
-    let origin = front.outer_position().ok()?.to_logical::<f64>(scale);
-    let size = front.outer_size().ok()?.to_logical::<f64>(scale);
-    let stepped = (origin.x + CASCADE_STEP, origin.y + CASCADE_STEP);
-
-    let Some(monitor) = front.current_monitor().ok().flatten() else {
-        return Some(stepped);
-    };
-    let area = monitor.work_area();
-    let corner = area.position.to_logical::<f64>(monitor.scale_factor());
-    let extent = area.size.to_logical::<f64>(monitor.scale_factor());
-    let fits = stepped.0 + size.width <= corner.x + extent.width
-        && stepped.1 + size.height <= corner.y + extent.height;
-    Some(if fits {
-        stepped
-    } else {
-        (corner.x + CASCADE_STEP, corner.y + CASCADE_STEP)
-    })
 }
 
 /// How recently a window was opened, read off its label: `main` came first and
@@ -1091,6 +1067,7 @@ pub fn run() {
         .manage(NextLabel(AtomicUsize::new(1)))
         .manage(ColdStart(Mutex::new(Some(Vec::new()))))
         .manage(Quitting(AtomicBool::new(false)))
+        .manage(window_frame::WindowFrames::default())
         .invoke_handler(tauri::generate_handler![
             images::resolve_doc_images,
             images::read_doc_image,
@@ -1108,6 +1085,9 @@ pub fn run() {
             start_window_drag
         ])
         .on_window_event(|window, event| match event {
+            tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
+                window_frame::remember(window);
+            }
             // Dropped on a window is opened in that window, whatever it was
             // showing — unless it turns out to be open elsewhere already.
             tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
@@ -1121,6 +1101,7 @@ pub fn run() {
             // Nothing is left of a closed window but its entry, which would
             // otherwise go on claiming a document nobody is reading.
             tauri::WindowEvent::Destroyed => {
+                window_frame::forget(window);
                 window.state::<Windows>().0.lock().unwrap().remove(window.label());
                 // A quit in progress moves on to the next window.
                 if window.state::<Quitting>().0.load(Ordering::SeqCst) {
@@ -1130,6 +1111,7 @@ pub fn run() {
             _ => {}
         })
         .setup(|app| {
+            build_window(app.handle(), "main")?;
             #[cfg(not(target_os = "macos"))]
             {
                 let args: Vec<String> = std::env::args().collect();
@@ -1138,9 +1120,8 @@ pub fn run() {
                     open_argument(app.handle(), &args[1], &cwd);
                 }
             }
-            // The configured window exists by now: Tauri's own setup builds it
-            // just before calling this. Whatever the app was launched to open
-            // can finally be routed — into that window, if it is the only one.
+            // Main now exists with its restored frame. Whatever arrived before
+            // Ready can finally be routed into it instead of a second window.
             let waiting = app.state::<ColdStart>().0.lock().unwrap().take();
             for doc in waiting.unwrap_or_default() {
                 open_spec(app.handle(), doc.spec, doc.doc_id, None);

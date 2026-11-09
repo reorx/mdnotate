@@ -1,6 +1,6 @@
 ---
 created: 2026-09-28
-updated: 2026-10-21
+updated: 2026-11-09
 tags:
   - testing
   - verification
@@ -26,7 +26,7 @@ tags:
 | `mdnotate` 命令 | `cargo test -p mdnotate-cli`，符号链接解析另走 `tmp/smoke-cli.sh` |
 | 命令的签名 | `tmp/verify-cli-signing.sh` |
 
-**Tauri 窗口没法用 agent-browser 驱动**（不开 CDP）。截图和 System Events 基本被系统权限挡死：截图全黑，辅助功能报 0 个窗口。所以 Tauri 窗口里的界面改动只能靠人眼验收；能在浏览器模式里验的，尽量在浏览器模式里验。
+**Tauri 窗口没法用 agent-browser 驱动**（不开 CDP）。原生验收先按 `~/.claude/docs/DESKTOP_APP_TESTING.md` 检查权限并运行 `wake-screen`；当前机器的 `agent-desktop` 已能读窗口、按窗口 ID 移动和缩放、截取窗口图。权限会随会话变化，调用前检查 `agent-desktop status` / `permissions`。能在浏览器模式里验的界面仍可用浏览器迭代。
 
 ## 浏览器模式
 
@@ -79,6 +79,8 @@ vitest 的 `include` 只认 `tests/`，所以要 `--config /dev/null`。
 - 窗口标题：本机给了屏幕录制权限所以读得到。标题就是文档名，用来断言哪个窗口装着哪个文档。
 
 脚本是 `tmp/multiwindow/list-windows.py`。
+
+也可用 `agent-desktop list-windows --app mdnotate` 取窗口 ID、PID、标题和 bounds。正式版与 dev 同名时，必须核对 PID 对应的可执行文件路径后才操作，避免移动用户正在用的正式窗口。窗口 frame 的恢复、连续避让、持久化不漂移、移动缩放后重启、屏幕外恢复及首次启动的实机记录在 `tmp/2026-11-09-window-frame/`。
 
 ## 打包产物
 

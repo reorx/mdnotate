@@ -37,7 +37,7 @@ src/components/   Home 与它的卡片（OpenFileCard / ClipboardCard / DefaultA
 src/store.ts      zustand 全局状态，每个窗口一份
 src/App.css       样式与深色调色板；find-highlight.css 单独装 ::highlight() 规则
 src-tauri/src/    lib.rs（文档路由、窗口注册表、commands、migrations）、menu.rs、
-                  channel.rs（dev identifier）、default_app.rs、cli_install.rs
+                  channel.rs（dev identifier）、window_frame.rs（窗口大小位置与避让）、default_app.rs、cli_install.rs
 src-tauri/cli/    `mdnotate` 命令，独立 crate `mdnotate-cli`
 scripts/          build-cli.sh、build-signed.sh、bump-version.sh、release-status.sh
 skills/           /mdnotate 与 /mdnotate-last 两个 Agent Skill（用前要 symlink，见 skills/README.md）
@@ -79,6 +79,7 @@ pnpm icons         # 从 design/app-icon/icons.mjs 重新生成 App 图标与 fa
 - **往窗口发事件用 `emit_to`，不用 `emit`。** 广播会让每个窗口都换文档 / 都弹面板。
 - **前端先注册 listener，再 drain pending。**
 - **一个文档一个窗口**（`choose_target()`）：已开着的送回原窗口并重读；停在首页的空窗口就地填入；否则开新窗口 `doc-N`。窗口内的入口一律原地替换。
+- **main 是 `create: false`、由 setup 自己建，所有窗口都经 `build_window()`**。删除 `create: false` 会重复建 main、令 setup 报错；绕过 `build_window()` 则不会应用记住的 frame。
 - **⌘N 开出的空窗口不能标 `taken`**，否则下一篇文档会另开窗口而不是填进去。
 - **打开失败也要 `announceDoc()`**：窗口在路由那一刻就被标成装着该文档了。
 - **「打开成功关掉 ⌘O 面板」只写在 `store.ts` 的 `openDoc` 里**；落区的 drop 事件里 JS 不自己打开文件，Rust 已经开过了。
@@ -172,7 +173,7 @@ pnpm icons         # 从 design/app-icon/icons.mjs 重新生成 App 图标与 fa
 
 ## 验收
 
-- **Tauri 窗口没法用 agent-browser 驱动**，截图和 System Events 也被 TCC 挡住。界面改动尽量在 `pnpm dev` 的浏览器模式里验，其余靠人眼。
+- **Tauri 窗口没法用 agent-browser 驱动**；原生测试按桌面验收文档使用 `agent-desktop`，先检查权限并 `wake-screen`。正式版与 dev 同名，操作前按 PID 确认可执行文件。
 - 浏览器模式里划词必须用真实鼠标序列（`mouse move → down → move → move → up`），合成事件无效。
 - Rust + SQLite：起 `pnpm tauri dev`，用 debug 二进制 `<target-dir>/debug/mdnotate '<spec>'` 转发文档，再 `sqlite3` 查库。本机 `~/.cargo/config.toml` 把 target-dir 设成了 `~/Library/Caches/cargo-target`，不在 `src-tauri/target/`。
 - 冷启动、文件关联、链接只能用打包产物验；测完 `lsregister -u <built app>`。

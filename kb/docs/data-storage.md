@@ -1,5 +1,6 @@
 ---
 created: 2026-09-28
+updated: 2026-11-09
 tags:
   - sqlite
   - migrations
@@ -18,7 +19,7 @@ tags:
 | 正式版 | `~/Library/Application Support/top.ideachat.mdnotate/` |
 | dev 构建 | `~/Library/Application Support/top.ideachat.mdnotate.dev/` |
 
-里面是 `mdnotate.db`（SQLite）和 `settings.json`。
+里面是 `mdnotate.db`（SQLite）、`settings.json` 和 `window.json`。`window.json` 只归 Rust 的 `window_frame.rs` 管，key `frame` 存窗口的 logical 位置与内容尺寸；不经过前端 `mergeSettings`。读取时要求字段齐全、数值有限、宽高为正，非法值按无记录处理。store 插件以 100ms 防抖自动保存，并在退出时落盘。
 
 ### dev 构建有自己的 identifier
 
