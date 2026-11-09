@@ -36,7 +36,9 @@ main 的 config 必须保留 `create: false`，由 setup 在 drain 冷启动文�
 
 ## 遗留问题
 
-正式发布后的本机升级和打包冷启动检查在发布流程中继续完成。
+0.15.0 的 Release 和 Homebrew cask 已发布，SHA-256 为 `d723b97306e7c929087dcb7ca47e2ce12938f265c70aafe42f4df64b6a25482f`。CI 成功，但下载的 app 缺少离线公证票据：Apple 已接受公证，在线 Gatekeeper 通过；手动给临时 app 附票据后全部分发检查通过。已记入 known-issues，后续需修复发布流程对票据的检查，不覆盖已发布产物。
+
+本机正式版仍在运行，已按发布文档请求用户自行 ⌘Q 退出。升级和打包冷启动检查等待这一步，安装时会为本机 app 附上票据。
 
 ## 相关文档
 

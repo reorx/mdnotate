@@ -4,6 +4,8 @@
 
 ## 用户方便在 Tauri 里实机操作时
 
+- **窗口 frame 的正式版升级与冷启动补验**：0.15.0 已发布，dev 实机全部通过；用户用 ⌘Q 退出当前 0.14.1 后，执行 Homebrew 升级，为安装 app 执行 `xcrun stapler staple`（发布包缺离线票据，见 known-issues），核对版本与签名。再用 `open -a /Applications/mdnotate.app <file.md>` 确认冷启动只有一个文档窗口，移动缩放后退出重开能恢复，最后把 app 开回来。
+  → 结果记到 `kb/sessions/2026-11-09-window-frame.md`；dmg、Homebrew 缓存、脚本与验收材料已准备在 `tmp/2026-11-09-window-frame/`
 - **标注导入的 WKWebView / SQLite 补验**（浏览器往返、即时高亮、草稿保留、存储故障已验）：导入默认格式 → 编辑评论 → 重开同一文档，确认 SQLite 保留；中文组字时 Enter / Esc 不提交或退出导入。未改变数据库 schema 或写入接口。
   → 结果记到 `kb/plans/2026-11-02-import-annotations.md`；浏览器材料在 `tmp/2026-11-02-import-annotations/`
 - **编辑模式人工验收**：`pnpm tauri dev`，按 `tmp/2026-10-21-edit-mode/acceptance-report.md` 第 3 节的 14 项逐条走（样例文件在同目录 `manual/`）。重点：原生三按钮对话框的 Return / Esc 落点、关窗与 ⌘Q 逐个确认（含两个窗口都有改动、中途 Cancel 停止退出）、⌘Q 关完所有窗口后 app 确实退出、中文输入法组字时 Enter / Esc。
