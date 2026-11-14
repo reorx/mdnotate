@@ -18,8 +18,9 @@ actions: **Highlight** keeps a plain highlight, **Comment** attaches a note.
 
 ### Exporting
 
-Click "Export Annotation" in the toolbar to see all highlights as Markdown
-blockquotes, each followed by its comment. Copy the result anywhere.
+Click "Export and Copy" in the toolbar to put all highlights on the clipboard as
+Markdown blockquotes, each followed by its comment. To look the result over first,
+use "Export" at the top of the annotations panel.
 
 ## Reading Comfort
 

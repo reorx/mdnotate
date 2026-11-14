@@ -1,6 +1,6 @@
 ---
 created: 2026-09-28
-updated: 2026-11-02
+updated: 2026-11-14
 tags:
   - annotations
   - recogito
@@ -122,6 +122,13 @@ highlight 与 comment 是同一结构，`comment === null` 即纯高亮。界面
 
 ## 导出
 
+导出有两个入口，产出同一份文本（都经 `export-annotations.ts` 的 `renderExport`）：
+
+- **顶栏 Export and Copy**（琥珀色，复制图标，带标注数）：一键按模板渲染并写入剪切板，不经过任何页面。成功后原地显示「Copied」1.5 秒；两种文案叠在同一格里，按钮宽度不变，旁边的 Edit / View 不会被挤动。写剪切板失败走顶部错误条。
+- **Annotations 侧栏标题行的 Export**（Import 右边）：进入 Export 页，先看渲染结果再点 Copy。侧栏收起时不显示。
+
+两者的可用性只由 `exportUnavailableReason` 决定：编辑时置灰（标注可能随下一次保存移动），没有标注时置灰；悬停提示给出原因。源码视图下顶栏按钮照常可用 —— 导出只读 store 里的标注，与正文怎么显示无关。
+
 导出是两层模板：
 
 - 外层 `settings.template`：占位符 `{{filePath}}`、`{{annotations}}`。
@@ -155,6 +162,7 @@ highlight 与 comment 是同一结构，`comment === null` 即纯高亮。界面
 - `src/lib/use-text-annotator.ts` —— 标注库的封装：draft 生命周期、弹窗锚点、图标同步
 - `src/lib/popup-position.ts`、`src/lib/annotation-markers.ts` —— 落点几何，纯规则
 - `src/lib/template.ts` —— 两层模板（`tests/template.test.ts`）
+- `src/lib/export-annotations.ts` —— 两个导出入口共用的渲染与可用性判定（`tests/export-annotations.test.ts`）
 - `src/lib/import-annotations.ts`、`src/components/ImportAnnotations.tsx` —— 默认格式解析、定位、预览（`tests/import-annotations*.test.ts` 包含服务与浏览器存储行为）
 - `src/lib/list-numbers.ts` 的 `remapToListNumbers`、`annotate.ts` 的 `moveOntoListNumbers`、`recent-docs.ts` 的 `preListNumbersHash` —— 编号成为文字前的标注的挪动（`tests/list-numbers.test.tsx`、`tests/list-numbers-migration.test.ts`）
-- `src/components/AnnotationPopup.tsx`、`CommentEditor.tsx`、`CommentMarkers.tsx`、`AnnotationList.tsx`、`ExportView.tsx`、`IconButton.tsx`
+- `src/components/AnnotationPopup.tsx`、`CommentEditor.tsx`、`CommentMarkers.tsx`、`AnnotationList.tsx`、`ExportView.tsx`、`ExportCopyButton.tsx`、`IconButton.tsx`

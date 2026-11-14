@@ -22,7 +22,12 @@ interface AnnotationListProps {
   onDelete: (id: string) => void;
   importDisabledReason: string | null;
   onImport: () => void;
+  exportDisabledReason: string | null;
+  onExport: () => void;
 }
+
+const HEADER_BUTTON =
+  '-my-0.5 shrink-0 rounded px-1.5 py-0.5 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800 focus-visible:outline-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-50';
 
 export function AnnotationList({
   annotations,
@@ -35,6 +40,8 @@ export function AnnotationList({
   onDelete,
   importDisabledReason,
   onImport,
+  exportDisabledReason,
+  onExport,
 }: AnnotationListProps) {
   const activeRef = useRef<HTMLDivElement | null>(null);
 
@@ -57,9 +64,20 @@ export function AnnotationList({
           title={importDisabledReason ?? 'Import annotations from default Markdown export'}
           disabled={!!importDisabledReason}
           onClick={onImport}
-          className="-my-0.5 ml-auto shrink-0 rounded px-1.5 py-0.5 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800 focus-visible:outline-2 focus-visible:outline-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className={`ml-auto ${HEADER_BUTTON}`}
         >
           Import
+        </button>
+        {/* The Export page, for looking the result over before copying it.
+            The header's Export and Copy is the one-click way. */}
+        <button
+          aria-label="Export annotations"
+          title={exportDisabledReason ?? 'Open the Export page to review the result before copying'}
+          disabled={!!exportDisabledReason}
+          onClick={onExport}
+          className={HEADER_BUTTON}
+        >
+          Export
         </button>
       </div>
       {annotations.length === 0 ? (

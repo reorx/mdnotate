@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ArrowLeft, Check, Copy } from 'lucide-react';
-import { annotationsToMarkdown } from '../lib/annotations';
 import { writeClipboardText } from '../lib/clipboard';
-import { renderTemplate } from '../lib/template';
+import { renderExport } from '../lib/export-annotations';
 import { useAppStore } from '../store';
 
 export function ExportView() {
@@ -14,11 +13,7 @@ export function ExportView() {
   const [copied, setCopied] = useState(false);
 
   const output = useMemo(
-    () =>
-      renderTemplate(template, {
-        filePath: source,
-        annotations: annotationsToMarkdown(annotations, annotationTemplate),
-      }),
+    () => renderExport(source, annotations, { template, annotationTemplate }),
     [template, annotationTemplate, source, annotations],
   );
 

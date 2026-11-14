@@ -30,6 +30,7 @@ import { isTauri } from '../lib/tauri-env';
 import { Toc } from './Toc';
 import { ImportAnnotations } from './ImportAnnotations';
 import { importUnavailableReason } from '../lib/import-annotations';
+import { exportUnavailableReason } from '../lib/export-annotations';
 
 /**
  * The hairline between a panel and the document, and the drag that resizes the
@@ -144,6 +145,7 @@ export function Reader() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const annotationsOpen = useAppStore((s) => s.annotationsOpen);
   const view = useAppStore((s) => s.view);
+  const setView = useAppStore((s) => s.setView);
   const openDialog = useAppStore((s) => s.openDialog);
   const annotations = useAppStore((s) => s.annotations);
   const annotationsHash = useAppStore((s) => s.annotationsHash);
@@ -492,6 +494,8 @@ export function Reader() {
                 onDelete={annotator.deleteAnnotation}
                 importDisabledReason={importDisabledReason}
                 onImport={() => setImportOpen(true)}
+                exportDisabledReason={exportUnavailableReason({ count: annotations.length, editing })}
+                onExport={() => setView('export')}
               />
             </PanelContent>
           </aside>

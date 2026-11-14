@@ -20,7 +20,7 @@ Or grab the signed & notarized dmg from [Releases](https://github.com/reorx/mdno
 - **Reading-first typography**: dense layout, high signal-to-noise, no editing
 - **TOC sidebar**: heading tree, click to jump, scroll-spy highlights the current heading
 - **Annotations**: select text → Highlight or Comment (powered by `@recogito/text-annotator`, in-memory per session)
-- **Export Annotation**: renders annotations through a configurable template into a copyable text box
+- **Export and Copy**: one click in the toolbar renders annotations through a configurable template and puts the result on the clipboard; **Export** at the top of the annotations panel opens the same result in a text box to review first
 - **Settings**: customize the export template with `{{filePath}}` and `{{annotations}}` placeholders (persisted via tauri-plugin-store)
 
 Default template:

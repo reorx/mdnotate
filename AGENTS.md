@@ -19,7 +19,8 @@ src/lib/          纯逻辑 + hook，按主题：
   编辑         edit-session（编辑的唯一入口）、use-code-editor（CodeMirror 封装）、edit-text、
                edit-prompts、doc-file、reanchor（保存后标注按原文重新定位）
   标注         annotate（改标注的唯一入口）、annotations、use-text-annotator（recogito 封装）、
-               popup-position、annotation-markers、template（导出模板）、import-annotations（默认格式导入）
+               popup-position、annotation-markers、template（导出模板）、export-annotations（两个导出入口共用的渲染与可用性）、
+               import-annotations（默认格式导入）
   阅读器       search + use-doc-search + find-painter（⌘F）、use-select-all（⌘A）、
                keys（按键谓词）、toc、doc-info、panels、window-drag、
                box-table（CLI 框线表格 → GFM 表格，只喂渲染器、不动 store）、
@@ -33,7 +34,7 @@ src/components/   Home 与它的卡片（OpenFileCard / ClipboardCard / DefaultA
                   OpenDialog、RecentList、Reader（正文 + 两侧栏）、Toc、AnnotationList、
                   AnnotationPopup、CommentEditor（弹窗与侧栏共用的评论框）、IconButton、
                   CommentMarkers、CodeEditor、FindBar、StatusBar、DocTitle、
-                  ExportView、SettingsView、FrontMatter（正文顶部的元数据字段列表）
+                  ExportView、ExportCopyButton（顶栏一键导出并复制）、SettingsView、FrontMatter（正文顶部的元数据字段列表）
 src/store.ts      zustand 全局状态，每个窗口一份
 src/App.css       样式与深色调色板；find-highlight.css 单独装 ::highlight() 规则
 src-tauri/src/    lib.rs（文档路由、窗口注册表、commands、migrations）、menu.rs、

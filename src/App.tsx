@@ -11,7 +11,6 @@ import {
   Pencil,
   RotateCw,
   Settings,
-  SquareArrowOutUpRight,
 } from 'lucide-react';
 import { confirmLeaveEdits, startEditing, stopEditing } from './lib/edit-session';
 import { openSpec, reloadDoc } from './lib/open-doc';
@@ -28,6 +27,7 @@ import {
 } from './lib/theme';
 import { useAppStore, type View } from './store';
 import { DocTitle } from './components/DocTitle';
+import { ExportCopyButton } from './components/ExportCopyButton';
 import { ExportView } from './components/ExportView';
 import { Home } from './components/Home';
 import { OpenDialog } from './components/OpenDialog';
@@ -42,7 +42,6 @@ function App() {
   const setView = useAppStore((s) => s.setView);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const toggleAnnotations = useAppStore((s) => s.toggleAnnotations);
-  const annotationCount = useAppStore((s) => s.annotations.length);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const theme = useAppStore((s) => s.settings.theme);
   const setResolvedTheme = useAppStore((s) => s.setResolvedTheme);
@@ -212,23 +211,7 @@ function App() {
               Edit
             </button>
           ))}
-        {/* Greyed rather than hidden while editing, so the button beside it
-            does not shift: the annotations are about the saved text, and may
-            yet move when it is saved again. */}
-        {doc && view === 'reader' && (
-          <button
-            className="flex items-center gap-1.5 rounded bg-amber-500 px-2.5 py-1 text-[13px] font-medium text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40 dark:disabled:opacity-25"
-            disabled={annotationCount === 0 || editing}
-            title={
-              editing ? 'Switch to View to export' : annotationCount === 0 ? 'Highlight some text first' : undefined
-            }
-            onClick={() => setView('export')}
-          >
-            <SquareArrowOutUpRight className="h-3.5 w-3.5" />
-            Export Annotation
-            {annotationCount > 0 && <span className="rounded bg-amber-600 px-1 text-[11px]">{annotationCount}</span>}
-          </button>
-        )}
+        {doc && view === 'reader' && <ExportCopyButton />}
         <button
           className="rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
           title="Settings"
