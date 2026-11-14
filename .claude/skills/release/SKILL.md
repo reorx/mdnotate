@@ -144,6 +144,7 @@ git push --delete origin v0.4.2 && git tag -d v0.4.2
 | ~30 秒 | 版本校验：`tauri.conf.json` 没 bump 或与 tag 不一致 |
 | 1~2 分钟 | 测试没过（第 3 步跳过了） |
 | 几分钟后 | 签名 / 公证：`MACOS_CERT_P12`、`MACOS_CERT_PASSWORD`、`NOTARY_KEY`、`NOTARY_KEY_ID`、`NOTARY_ISSUER_ID` 里有过期或缺失的 |
+| 几分钟后，公证报 `HTTP status code: 403. A required agreement is missing or has expired` | 凭据没问题，是 Apple 开发者账号有新协议待接受。请用户以 Account Holder 身份在 developer.apple.com / App Store Connect 接受后，`gh run rerun <id> --failed` 原样重跑，**不用删 tag**（什么都还没发出去）。2026-11-14 v0.16.0 遇到过 |
 
 签名凭据源文件在 `~/Sync/apple-developer/`，背景见
 `../vocalflow-mac/kb/notes/2026-08-10-macos-developer-id-signing-guide.md`。

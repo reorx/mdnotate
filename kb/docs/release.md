@@ -82,6 +82,8 @@ brew list --cask --versions mdnotate
 
 先用 `gh run view <run-id> --log-failed` 定位。尚未发布的 tag 与已经有用户下载的 Release 必须区别处理；已发布的 dmg 不覆盖、不替换，修复通过新版本交付。仅 Homebrew 步骤失败时修复 cask，无需重新生成和上传 dmg。
 
+公证返回 403「A required agreement is missing or has expired」时，问题在 Apple 开发者账号而不在凭据：需要用户以 Account Holder 身份登录 developer.apple.com 或 App Store Connect 接受新协议。接受后用 `gh run rerun <run-id> --failed` 重跑同一个 tag 的 workflow 即可，tag 指向的 commit 没有问题，不必删 tag 换版本号。
+
 ## 相关文件
 
 - [项目发布 SOP](../../.claude/skills/release/SKILL.md)
