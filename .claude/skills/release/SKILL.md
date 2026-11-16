@@ -145,6 +145,7 @@ git push --delete origin v0.4.2 && git tag -d v0.4.2
 | 1~2 分钟 | 测试没过（第 3 步跳过了） |
 | 几分钟后 | 签名 / 公证：`MACOS_CERT_P12`、`MACOS_CERT_PASSWORD`、`NOTARY_KEY`、`NOTARY_KEY_ID`、`NOTARY_ISSUER_ID` 里有过期或缺失的 |
 | 几分钟后，公证报 `HTTP status code: 403. A required agreement is missing or has expired` | 凭据没问题，是 Apple 开发者账号有新协议待接受。请用户以 Account Holder 身份在 developer.apple.com / App Store Connect 接受后，`gh run rerun <id> --failed` 原样重跑，**不用删 tag**（什么都还没发出去）。2026-11-14 v0.16.0 遇到过 |
+| 排队约 15 分钟后被取消，job 没有任何 step，annotation 写 `The job was not acquired by Runner of type hosted` | GitHub 的 macOS runner 容量不足，和代码、凭据无关。直接 `gh run rerun <id> --failed`，不用删 tag。2026-11-17 重跑 v0.16.0 时遇到过一次，再跑一次就成了 |
 
 签名凭据源文件在 `~/Sync/apple-developer/`，背景见
 `../vocalflow-mac/kb/notes/2026-08-10-macos-developer-id-signing-guide.md`。

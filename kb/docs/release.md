@@ -84,6 +84,10 @@ brew list --cask --versions mdnotate
 
 公证返回 403「A required agreement is missing or has expired」时，问题在 Apple 开发者账号而不在凭据：需要用户以 Account Holder 身份登录 developer.apple.com 或 App Store Connect 接受新协议。接受后用 `gh run rerun <run-id> --failed` 重跑同一个 tag 的 workflow 即可，tag 指向的 commit 没有问题，不必删 tag 换版本号。
 
+job 排队约 15 分钟后被取消、没有任何 step 跑过，annotation 为 `The job was not acquired by Runner of type hosted`：是 GitHub 的 macOS runner 容量不足，同样直接 `--failed` 重跑。此时 `gh run view --log-failed` 没有日志（`gh run view --log` 还可能返回 503），原因只在 `gh run view <id>` 的 ANNOTATIONS 里。
+
+> v0.16.0 的实际经过：2026-11-14 首次公证 403；2026-11-17 用户接受协议后第一次重跑因 runner 容量不足被取消，第二次重跑成功（约 12 分钟），Release、cask（sha256 与 dmg 一致）都对上，随后 brew 升级本机到 0.16.0；`codesign`、`spctl`（Notarized Developer ID）、`stapler validate`、`syspolicy_check distribution` 全过，包内 CLI 输出 `mdnotate 0.16.0`。日志在 `tmp/2026-11-17-quick-export-rerun/`。
+
 ## 相关文件
 
 - [项目发布 SOP](../../.claude/skills/release/SKILL.md)

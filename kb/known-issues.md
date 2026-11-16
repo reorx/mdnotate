@@ -6,6 +6,7 @@
 
 - 记录：2026-11-09（发布后验证，`tmp/2026-11-09-window-frame/distribution-check.log`）
 - Apple 已接受公证，在线 Gatekeeper 返回 `Notarized Developer ID`，但发布 dmg 内的 app 经 `stapler validate` 检查没有附带票据，`syspolicy_check distribution` 报 `Notary Ticket Missing`。新机器离线安装时无法通过本地票据完成公证验证。CI 显示 `Stapling app...`，目前的签名检查没有验证票据，因而仍发布成功。
+- 2026-11-17：0.16.0（brew 升级后的 `/Applications/mdnotate.app`，没有人工 staple）`stapler validate` 与 `syspolicy_check distribution` 都通过，包内有 `Contents/CodeResources` 票据。所以 0.15.0 的缺失看来不是必然；原因没查清，CI 也仍然不检查票据，下次发版后继续核对。
 - 对下载的临时 app 执行 `xcrun stapler staple` 后，票据验证和全部分发检查通过。后续应在打包 dmg 前显式验证 app 票据，并对最终 dmg 内的 app 再验一次；已发布的 0.15.0 产物不覆盖，修复后用新版本交付。
 
 ## 编辑：从 Dock 退出、注销或关机时，未保存的编辑直接丢失

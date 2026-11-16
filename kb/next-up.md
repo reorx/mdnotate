@@ -2,14 +2,14 @@
 
 > 接下来要做的事，按时间排。做完一项就删掉，结果记到条目指定的 kb 文档，这里不留记录。
 
-## 等用户接受 Apple 开发者协议后
+## 屏幕可截图、用户方便时
 
-- **重跑 v0.16.0 发布并升级本机**（2026-11-14）：v0.16.0（一键 Export and Copy）的 tag 已推，workflow run `43610612142` 在公证时被 Apple 拒绝（403，账号有新协议未接受），没有 Release、cask 仍是 0.15.0。用户接受协议后 `gh run rerun 43610612142 --failed`，按 release skill 核对 Release、cask 与签名；本机 `/Applications/mdnotate.app` 目前是 0.14.1、未在运行，`brew upgrade` 前要先 `brew trust --cask reorx/tap/mdnotate`（新版 brew 拒绝未信任的 tap），升级后照 known-issues 补 `xcrun stapler staple`。
-  → 结果记到 `kb/docs/release.md`；失败日志在 `tmp/2026-11-14-quick-export/release-failed.log`
+- **0.16.0 一键 Export and Copy 的原生实机补验**（2026-11-17）：0.16.0 已发布并升级本机（`/Applications/mdnotate.app`），浏览器模式已验，原生窗口里的点击还没验——当时显示器不可截图（`screencapture` 报 `could not create image from display`，`wake-screen` 卡住不返回），没法驱动窗口。做法：先 `pbpaste > 备份`，用独立 HOME 启动安装版（`HOME=<临时目录> /Applications/mdnotate.app/Contents/MacOS/mdnotate <测试.md>`，不碰真实库）划一个词加评论，点顶栏 Export and Copy，`pbpaste` 应与侧栏 Export 页面内容一致，再还原剪贴板。写剪贴板走的是与旧 Export 页「Copy」同一个 `writeClipboardText`（Tauri clipboard-manager，权限早已在 capabilities 里），风险低。
+  → 结果记到 `kb/docs/annotations-and-export.md`；备份剪贴板与测试文档在 `tmp/2026-11-17-quick-export-rerun/`
 
 ## 用户方便在 Tauri 里实机操作时
 
-- **窗口 frame 的正式版升级与冷启动补验**：0.15.0 已发布，dev 实机全部通过；用户用 ⌘Q 退出当前 0.14.1 后，执行 Homebrew 升级，为安装 app 执行 `xcrun stapler staple`（发布包缺离线票据，见 known-issues），核对版本与签名。再用 `open -a /Applications/mdnotate.app <file.md>` 确认冷启动只有一个文档窗口，移动缩放后退出重开能恢复，最后把 app 开回来。
+- **窗口 frame 的冷启动补验（正式版）**：本机已在 2026-11-17 随 0.16.0 升级（含 0.15.0 的窗口 frame 功能；dev 实机已全部通过）。待补：`open -a /Applications/mdnotate.app <file.md>` 确认冷启动只有一个文档窗口，移动缩放后退出重开能恢复，最后把 app 开回来。
   → 结果记到 `kb/sessions/2026-11-09-window-frame.md`；dmg、Homebrew 缓存、脚本与验收材料已准备在 `tmp/2026-11-09-window-frame/`
 - **标注导入的 WKWebView / SQLite 补验**（浏览器往返、即时高亮、草稿保留、存储故障已验）：导入默认格式 → 编辑评论 → 重开同一文档，确认 SQLite 保留；中文组字时 Enter / Esc 不提交或退出导入。未改变数据库 schema 或写入接口。
   → 结果记到 `kb/plans/2026-11-02-import-annotations.md`；浏览器材料在 `tmp/2026-11-02-import-annotations/`
